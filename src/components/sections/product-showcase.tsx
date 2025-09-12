@@ -2,89 +2,12 @@
 
 import Image from 'next/image';
 import AnimatedWrapper from '@/components/ui/animated-wrapper';
+import Breadcrumb from '@/components/ui/breadcrumb';
 import { Button } from '../ui/button';
 import FlipCard from '@/components/ui/flip-card';
 import GalleryLightbox from '@/components/ui/gallery-lightbox';
+import { galleries } from '@/data/galleries';
 
-// Real Unsplash photos for each gallery. Each entry includes a cover image
-// and several related slides from the same theme.
-const galleries = [
-  {
-    title: 'Portraits in the City',
-    category: 'Portrait',
-    image:
-      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=800&q=80',
-    images: [
-      {
-        src: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=1600&q=80',
-        title: 'City Portrait 1',
-        aiHint: 'city portrait',
-      },
-      {
-        src: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=1600&q=80',
-        title: 'City Portrait 2',
-        aiHint: 'city portrait',
-      },
-      {
-        src: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=1600&q=80',
-        title: 'City Portrait 3',
-        aiHint: 'city portrait',
-      },
-    ],
-    aiHint: 'city portrait',
-    year: 2023,
-  },
-  {
-    title: 'Coastal Landscapes',
-    category: 'Landscape',
-    image:
-      'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=800&q=80',
-    images: [
-      {
-        src: 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=1600&q=80',
-        title: 'Coast 1',
-        aiHint: 'coastal',
-      },
-      {
-        src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80',
-        title: 'Coast 2',
-        aiHint: 'coastal',
-      },
-      {
-        src: 'https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?auto=format&fit=crop&w=1600&q=80',
-        title: 'Coast 3',
-        aiHint: 'coastal',
-      },
-    ],
-    aiHint: 'coastal landscape',
-    year: 2022,
-  },
-  {
-    title: 'Urban Life',
-    category: 'Street',
-    image:
-      'https://images.unsplash.com/photo-1499914485622-0000e8b0dc95?auto=format&fit=crop&w=800&q=80',
-    images: [
-      {
-        src: 'https://images.unsplash.com/photo-1499914485622-0000e8b0dc95?auto=format&fit=crop&w=1600&q=80',
-        title: 'Urban 1',
-        aiHint: 'street',
-      },
-      {
-        src: 'https://images.unsplash.com/photo-1485872299829-6cfb59651d3d?auto=format&fit=crop&w=1600&q=80',
-        title: 'Urban 2',
-        aiHint: 'street',
-      },
-      {
-        src: 'https://images.unsplash.com/photo-1505150892987-424388e0267b?auto=format&fit=crop&w=1600&q=80',
-        title: 'Urban 3',
-        aiHint: 'street',
-      },
-    ],
-    aiHint: 'street photography',
-    year: 2024,
-  },
-];
 
 import React, { useState, useEffect } from 'react';
 import { getDominantColorFromUrl, rgbaFromRgb } from '@/lib/utils';
@@ -350,13 +273,14 @@ const ProductShowcase = () => {
     <section className="py-20 md:py-32 bg-secondary">
       <div className="container mx-auto px-4 md:px-6">
         <AnimatedWrapper>
+          <Breadcrumb className="mb-6" items={[{ label: 'Home', href: '/' }, { label: 'Featured Galleries' }]} />
           <div className="flex justify-between items-end mb-16">
             <h2 className="text-4xl md:text-6xl font-bold leading-tight">
               FEATURED
               <br />
               GALLERIES
             </h2>
-            <p className="text-6xl md:text-8xl font-bold text-muted-foreground/30">(06)</p>
+            <p className="text-6xl md:text-8xl font-bold text-muted-foreground/30">({galleries.length.toString().padStart(2,'0')})</p>
           </div>
         </AnimatedWrapper>
 
@@ -378,11 +302,11 @@ const ProductShowcase = () => {
           leftPanel={activeGallery !== null ? <PhotoLeftPanel /> : null}
         />
 
-        <div className="grid md:grid-cols-2 gap-8">
+  <div className="grid md:grid-cols-2 gap-8 items-stretch">
       {galleries.filter(g => !categoryFilter || g.category === categoryFilter).map((gallery, index) => (
             <AnimatedWrapper key={gallery.title} delay={`${index * 100}ms`}>
-  <FlipCard disableOverlay isFlipped={openIndex === index} onToggle={() => setOpenIndex(openIndex === index ? null : index)} className="group">
-                <div className="group">
+  <FlipCard disableOverlay isFlipped={openIndex === index} onToggle={() => setOpenIndex(openIndex === index ? null : index)} className="group h-full flex flex-col">
+                <div className="group flex flex-col h-full">
                   <div className="overflow-hidden mb-4">
         <a
       href={gallery.image}
@@ -391,7 +315,7 @@ const ProductShowcase = () => {
             tabIndex={0}
             aria-label={`Open ${gallery.title}`}
                     > 
-                      <div className="relative">
+                      <div className="relative rounded-md overflow-hidden" style={{ aspectRatio: '4/3' }}>
                         {/** compute placeholder URL to avoid nested template strings */}
                         {/** eslint-disable-next-line @typescript-eslint/no-shadow */}
                         {/* placeholderUrl */}
@@ -422,7 +346,7 @@ const ProductShowcase = () => {
                           sizes="(max-width: 640px) 100vw, 50vw"
                           placeholder={manifestMap[gallery.image]?.blurDataURL ? 'blur' : undefined}
                           blurDataURL={manifestMap[gallery.image]?.blurDataURL}
-                          className="w-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-105 relative"
+                          className="w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-105"
                           onLoad={async () => {
                             setLoadedMap(prev => ({ ...prev, [index]: true }));
                             // compute dominant color lazily if missing
@@ -437,15 +361,15 @@ const ProductShowcase = () => {
                       </div>
                     </a>
                   </div>
-                  <h3 className="text-xl font-semibold">{gallery.title}</h3>
-                  <p className="text-muted-foreground">{gallery.category}</p>
+                  <h3 className="text-lg font-semibold tracking-tight mt-2">{gallery.title}</h3>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{gallery.category}</p>
                 </div>
 
-                <div className="p-6 bg-background h-full">
+                <div className="p-6 bg-background h-full flex flex-col">
                   <h2 className="text-2xl font-bold mb-2">{gallery.title}</h2>
                   <p className="mb-4 text-muted-foreground">{gallery.category} &middot; {gallery.year}</p>
-                  <p className="text-muted-foreground">Brief description of the gallery and highlights. (Replace with real content.)</p>
-                  <div className="mt-4 flex gap-2">
+                  <p className="text-muted-foreground">A curated selection from {gallery.title} exploring {gallery.category.toLowerCase()} themes through six cohesive visuals.</p>
+                  <div className="mt-4 flex gap-2 mt-auto">
                     <Button variant="outline" onClick={() => window.open('#', '_blank')}>View Gallery</Button>
                   </div>
                 </div>
@@ -454,18 +378,9 @@ const ProductShowcase = () => {
           ))}
         </div>
         <AnimatedWrapper className="text-center mt-16">
-          <FlipCard disableOverlay isFlipped={openIndex === -1} onToggle={() => setOpenIndex(openIndex === -1 ? null : -1)}>
-            <div className="p-6">
-              <Button variant="outline">View All Galleries</Button>
-            </div>
-            <div className="p-6 bg-background">
-              <h2 className="text-3xl font-bold mb-4">All Galleries</h2>
-              <p>Here you can display a list or grid of all galleries, or link to a dedicated galleries page.</p>
-              <div className="mt-4">
-                <Button variant="ghost" onClick={() => setOpenIndex(null)}>Close</Button>
-              </div>
-            </div>
-          </FlipCard>
+          <Button variant="outline" onClick={() => { window.location.href = '/galleries'; }}>
+            View All Galleries
+          </Button>
         </AnimatedWrapper>
       </div>
     </section>
