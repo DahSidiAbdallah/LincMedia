@@ -6,17 +6,30 @@ import { Button } from '../ui/button';
 import FlipCard from '@/components/ui/flip-card';
 import GalleryLightbox from '@/components/ui/gallery-lightbox';
 
-// Curated, local, always-available mock images so captions match covers.
-// Replace these SVGs with real photos later; paths are stable.
+// Real Unsplash photos for each gallery. Each entry includes a cover image
+// and several related slides from the same theme.
 const galleries = [
   {
     title: 'Portraits in the City',
     category: 'Portrait',
-    image: '/galleries/portraits/portrait-1.svg',
+    image:
+      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=800&q=80',
     images: [
-      { src: '/galleries/portraits/portrait-1.svg', title: 'City Portrait 1', aiHint: 'city portrait' },
-      { src: '/galleries/portraits/portrait-2.svg', title: 'City Portrait 2', aiHint: 'city portrait' },
-      { src: '/galleries/portraits/portrait-3.svg', title: 'City Portrait 3', aiHint: 'city portrait' },
+      {
+        src: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=1600&q=80',
+        title: 'City Portrait 1',
+        aiHint: 'city portrait',
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=1600&q=80',
+        title: 'City Portrait 2',
+        aiHint: 'city portrait',
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=1600&q=80',
+        title: 'City Portrait 3',
+        aiHint: 'city portrait',
+      },
     ],
     aiHint: 'city portrait',
     year: 2023,
@@ -24,11 +37,24 @@ const galleries = [
   {
     title: 'Coastal Landscapes',
     category: 'Landscape',
-    image: '/galleries/coast/coast-1.svg',
+    image:
+      'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=800&q=80',
     images: [
-      { src: '/galleries/coast/coast-1.svg', title: 'Coast 1', aiHint: 'coastal' },
-      { src: '/galleries/coast/coast-2.svg', title: 'Coast 2', aiHint: 'coastal' },
-      { src: '/galleries/coast/coast-3.svg', title: 'Coast 3', aiHint: 'coastal' },
+      {
+        src: 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=1600&q=80',
+        title: 'Coast 1',
+        aiHint: 'coastal',
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80',
+        title: 'Coast 2',
+        aiHint: 'coastal',
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?auto=format&fit=crop&w=1600&q=80',
+        title: 'Coast 3',
+        aiHint: 'coastal',
+      },
     ],
     aiHint: 'coastal landscape',
     year: 2022,
@@ -36,51 +62,27 @@ const galleries = [
   {
     title: 'Urban Life',
     category: 'Street',
-    image: '/galleries/street/street-1.svg',
+    image:
+      'https://images.unsplash.com/photo-1499914485622-0000e8b0dc95?auto=format&fit=crop&w=800&q=80',
     images: [
-      { src: '/galleries/street/street-1.svg', title: 'Urban 1', aiHint: 'street' },
-      { src: '/galleries/street/street-2.svg', title: 'Urban 2', aiHint: 'street' },
-      { src: '/galleries/street/street-3.svg', title: 'Urban 3', aiHint: 'street' },
-      { src: '/galleries/street/street-4.svg', title: 'Urban 4', aiHint: 'street' },
+      {
+        src: 'https://images.unsplash.com/photo-1499914485622-0000e8b0dc95?auto=format&fit=crop&w=1600&q=80',
+        title: 'Urban 1',
+        aiHint: 'street',
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1485872299829-6cfb59651d3d?auto=format&fit=crop&w=1600&q=80',
+        title: 'Urban 2',
+        aiHint: 'street',
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1505150892987-424388e0267b?auto=format&fit=crop&w=1600&q=80',
+        title: 'Urban 3',
+        aiHint: 'street',
+      },
     ],
     aiHint: 'street photography',
     year: 2024,
-  },
-  {
-    title: 'Mountain Vistas',
-    category: 'Landscape',
-    image: '/galleries/mountains/mountain-1.svg',
-    images: [
-      { src: '/galleries/mountains/mountain-1.svg', title: 'Mountain 1', aiHint: 'mountain' },
-      { src: '/galleries/mountains/mountain-2.svg', title: 'Mountain 2', aiHint: 'mountain' },
-      { src: '/galleries/mountains/mountain-3.svg', title: 'Mountain 3', aiHint: 'mountain' },
-    ],
-    aiHint: 'mountain landscape',
-    year: 2021,
-  },
-  {
-    title: 'Lakeside Reflections',
-    category: 'Nature',
-    image: '/galleries/lakes/lake-1.svg',
-    images: [
-      { src: '/galleries/lakes/lake-1.svg', title: 'Lake 1', aiHint: 'lake' },
-      { src: '/galleries/lakes/lake-2.svg', title: 'Lake 2', aiHint: 'lake' },
-      { src: '/galleries/lakes/lake-3.svg', title: 'Lake 3', aiHint: 'lake' },
-    ],
-    aiHint: 'lake reflection',
-    year: 2023,
-  },
-  {
-    title: 'Desert Light',
-    category: 'Landscape',
-    image: '/galleries/desert/desert-1.svg',
-    images: [
-      { src: '/galleries/desert/desert-1.svg', title: 'Desert 1', aiHint: 'desert' },
-      { src: '/galleries/desert/desert-2.svg', title: 'Desert 2', aiHint: 'desert' },
-      { src: '/galleries/desert/desert-3.svg', title: 'Desert 3', aiHint: 'desert' },
-    ],
-    aiHint: 'desert landscape',
-    year: 2022,
   },
 ];
 
@@ -197,7 +199,7 @@ const PhotoLeftPanel: React.FC = () => {
   if (!item) return <div />;
   const gotoSlide = (i: number) => {
     try {
-      const api = (window as any)?.__photoswipeInstance || (window as any)?.pswpRef?.current?.pswp;
+      const api = (window as any)?.__photoSwipeInstance || (window as any)?.pswpRef?.current?.pswp;
       api?.goTo?.(i);
     } catch {}
   };
