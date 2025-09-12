@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#4facfe"/>
+  <rect y="300" width="800" height="300" fill="#00f2fe"/>
+  <circle cx="120" cy="120" r="60" fill="#fff" opacity="0.9"/>
+  <text x="400" y="560" text-anchor="middle" font-family="Inter, system-ui, Arial" font-size="40" fill="#ffffff">Coast 2</text>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="g3" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#00c6ff"/>
+      <stop offset="1" stop-color="#0072ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#g3)"/>
+  <rect x="320" y="160" width="160" height="220" rx="20" fill="#fff" fill-opacity="0.85"/>
+  <text x="400" y="520" text-anchor="middle" font-family="Inter, system-ui, Arial" font-size="40" fill="#ffffff" opacity="0.95">City Portrait 3</text>
+</svg>

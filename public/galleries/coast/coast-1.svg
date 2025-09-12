@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#74ebd5"/>
+      <stop offset="1" stop-color="#ACB6E5"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#sea)"/>
+  <rect x="0" y="360" width="800" height="140" fill="#2b7a78" opacity="0.5"/>
+  <rect x="0" y="460" width="800" height="80" fill="#3aafa9" opacity="0.6"/>
+  <text x="400" y="560" text-anchor="middle" font-family="Inter, system-ui, Arial" font-size="40" fill="#ffffff" opacity="0.95">Coastal Landscapes</text>
+</svg>

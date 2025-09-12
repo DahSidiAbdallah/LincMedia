@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#0f2027"/>
+  <rect y="420" width="800" height="180" fill="#203a43"/>
+  <rect x="300" y="360" width="200" height="40" fill="#ffd166"/>
+  <text x="400" y="120" text-anchor="middle" font-family="Inter, system-ui, Arial" font-size="38" fill="#ffffff">Street 2</text>
+</svg>

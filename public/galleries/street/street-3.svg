@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#1f4037"/>
+  <rect y="420" width="800" height="180" fill="#99f2c8"/>
+  <circle cx="600" cy="120" r="40" fill="#ffd166"/>
+  <text x="400" y="520" text-anchor="middle" font-family="Inter, system-ui, Arial" font-size="38" fill="#0a2540">Street 3</text>
+</svg>

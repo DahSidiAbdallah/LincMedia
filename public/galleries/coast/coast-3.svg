@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#1c92d2"/>
+  <rect y="340" width="800" height="260" fill="#f2fcfe"/>
+  <text x="400" y="540" text-anchor="middle" font-family="Inter, system-ui, Arial" font-size="40" fill="#0a2540">Coast 3</text>
+</svg>
