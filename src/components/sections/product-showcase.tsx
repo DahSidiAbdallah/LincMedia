@@ -11,7 +11,7 @@ import { galleries } from '@/data/galleries';
 
 import React, { useState, useEffect } from 'react';
 import { getDominantColorFromUrl, rgbaFromRgb } from '@/lib/utils';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 // Left panel component (moved outside to satisfy lint rule)
 const PhotoLeftPanel: React.FC = () => {
@@ -56,7 +56,6 @@ const PhotoLeftPanel: React.FC = () => {
   // do not auto-flip based on item presence anymore
 
   const isVideo = !!item?.video;
-  const progress = idx !== null && total > 0 ? (idx + 1) / total : 0;
   const items: any[] = (typeof window !== 'undefined' && (window as any).__photoSwipeItems) || [];
   const thumbContainerRef = React.useRef<HTMLDivElement | null>(null);
   const [videoDurations, setVideoDurations] = useState<Record<string, string>>({});
@@ -121,15 +120,29 @@ const PhotoLeftPanel: React.FC = () => {
   };
   if (!item) return <div />;
   const gotoSlide = (i: number) => {
+    const attempt = (retries = 3) => {
+      try {
+        const api = (window as any)?.__photoSwipeInstance || (window as any)?.pswpRef?.current?.pswp;
+        if (api && typeof api.goTo === 'function') {
+          api.goTo(i);
+          return;
+        }
+      } catch {}
+      if (retries > 0) setTimeout(() => attempt(retries - 1), 32);
+    };
+    // optimistic event dispatch so panel UI updates instantly
     try {
-      const api = (window as any)?.__photoSwipeInstance || (window as any)?.pswpRef?.current?.pswp;
-      api?.goTo?.(i);
+      const items: any[] = (window as any).__photoSwipeItems || [];
+      const it = items[i];
+      if (it) {
+        window.dispatchEvent(new CustomEvent('pswp-slide-change', { detail: { item: it, index: i, total: items.length, items } }));
+      }
     } catch {}
+    attempt();
   };
   return (
     <div className="relative h-full flex flex-col">
-      <div className="text-xs tracking-wide uppercase text-muted-foreground mb-2">{idx !== null && total ? `Slide ${idx + 1} / ${total}` : ''}</div>
-      <div className="h-1 w-full bg-muted/30 rounded overflow-hidden mb-4"><div className="h-full bg-foreground transition-all duration-500" style={{ width: `${progress * 100}%` }} /></div>
+      <div className="text-xs tracking-wide uppercase text-muted-foreground mb-3">{idx !== null && total ? `Slide ${idx + 1} / ${total}` : ''}</div>
       {items.length > 1 && (
         <div ref={thumbContainerRef} className="grid grid-cols-5 gap-1 mb-3 pr-2 overflow-y-auto max-h-32" role="grid" tabIndex={0} onKeyDown={onThumbKey} aria-label="Gallery thumbnails">
           {items.map((it, i) => {
@@ -157,14 +170,12 @@ const PhotoLeftPanel: React.FC = () => {
         </div>
       )}
   <FlipCard isFlipped={isFlipped} onToggle={() => setIsFlipped(s => !s)} disableOverlay frontClassName="p-2" backClassName="p-2 bg-background space-y-3">
-        <div
+        <button
           key={fadeKey + '-front'}
-          className="p-2 animate-fade fade-enter"
-          onClick={(e) => { e.stopPropagation(); if (idx !== null) gotoSlide(idx); }}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); if (idx !== null) gotoSlide(idx); } }}
-          aria-label="Show this image on the right"
+          type="button"
+          className="p-2 animate-fade fade-enter cursor-pointer text-left"
+          onClick={(e) => { e.stopPropagation(); setIsFlipped(true); }}
+          aria-label="Show details for this media"
         >
           {isVideo ? (
             <div className="relative">
@@ -188,7 +199,8 @@ const PhotoLeftPanel: React.FC = () => {
             <img src={item.src} alt={item.title} className="w-full object-cover rounded" />
           )}
           <div className="mt-2 font-semibold">{item.title}</div>
-        </div>
+          <div className="text-xs text-muted-foreground/70">Press Enter or Space for details</div>
+  </button>
         <div key={fadeKey + '-back'} className="space-y-3 animate-fade fade-enter">
           <h3 className="text-lg font-bold">{item.title}</h3>
           <p className="text-sm text-muted-foreground">{item.caption}</p>
@@ -204,20 +216,35 @@ const ProductShowcase = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const [manifestMap, setManifestMap] = useState<Record<string, any>>({});
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const categoryFilter = searchParams?.get('category') || '';
+  const initialCats = (() => {
+    const raw = searchParams?.get('cats');
+    if (!raw) return [] as string[];
+    return raw.split(',').filter(Boolean);
+  })();
+  const [categoryFilters, setCategoryFilters] = useState<string[]>(initialCats);
 
   const categories = Array.from(new Set(galleries.map(g => g.category)));
 
-  const setCategoryFilter = (cat: string) => {
-    const url = new URL(window.location.href);
-    if (!cat) url.searchParams.delete('category'); else url.searchParams.set('category', cat);
-    // push state so filter persists
-    window.history.pushState({}, '', url.toString());
-    // trigger a navigation to update search params hook
-    router.replace(url.pathname + url.search);
+  const toggleCategory = (cat: string) => {
+    setCategoryFilters(prev => {
+      const exists = prev.includes(cat);
+      const next = exists ? prev.filter(c => c !== cat) : [...prev, cat];
+      try {
+        const url = new URL(window.location.href);
+        if (next.length === 0) url.searchParams.delete('cats'); else url.searchParams.set('cats', next.join(','));
+        window.history.replaceState({}, '', url.toString());
+      } catch {}
+      return next;
+    });
   };
+
+  const clearAllCategories = () => {
+    setCategoryFilters([]);
+    try { const url = new URL(window.location.href); url.searchParams.delete('cats'); window.history.replaceState({}, '', url.toString()); } catch {}
+  };
+
+  // (legacy single-category filter function removed in favor of multi-select)
 
   // dominant colors per index
   const [dominantMap, setDominantMap] = useState<Record<number, string>>({});
@@ -284,14 +311,43 @@ const ProductShowcase = () => {
           </div>
         </AnimatedWrapper>
 
-        <div className="mb-6">
-          <div className="flex gap-2 items-center">
+        <div className="mb-6 space-y-3">
+          <div className="flex flex-wrap gap-2 items-center">
             <span className="text-sm text-muted-foreground">Filter:</span>
-            <button className={`px-2 py-1 rounded ${!categoryFilter ? 'bg-foreground text-background' : 'bg-muted-foreground/10'}`} onClick={() => setCategoryFilter('')}>All</button>
-            {categories.map(cat => (
-              <button key={cat} className={`px-2 py-1 rounded ${categoryFilter === cat ? 'bg-foreground text-background' : 'bg-muted-foreground/10'}`} onClick={() => setCategoryFilter(cat)}>{cat}</button>
-            ))}
+            <button
+              className={`px-2 py-1 rounded ${categoryFilters.length === 0 ? 'bg-foreground text-background' : 'bg-muted-foreground/10 hover:bg-muted-foreground/20'}`}
+              onClick={clearAllCategories}
+            >All</button>
+            {categories.map(cat => {
+              const active = categoryFilters.includes(cat);
+              return (
+                <button
+                  key={cat}
+                  onClick={() => toggleCategory(cat)}
+                  className={`px-2 py-1 rounded border transition ${active ? 'bg-foreground text-background border-foreground' : 'bg-muted-foreground/10 hover:bg-muted-foreground/20 border-transparent'}`}
+                  aria-pressed={active}
+                >{cat}</button>
+              );
+            })}
+            {categoryFilters.length > 0 && (
+              <button onClick={clearAllCategories} className="text-xs ml-2 underline text-muted-foreground hover:text-foreground">Clear</button>
+            )}
           </div>
+          {categoryFilters.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              {categoryFilters.map(cat => (
+                <span key={cat} className="flex items-center gap-1 bg-foreground/5 border border-foreground/20 rounded-full px-3 py-1 text-xs anim-filter-enter">
+                  {cat}
+                  <button
+                    aria-label={`Remove ${cat}`}
+                    onClick={() => toggleCategory(cat)}
+                    className="hover:text-destructive focus:outline-none"
+                  >×</button>
+                </span>
+              ))}
+              <button onClick={clearAllCategories} className="text-xs text-muted-foreground hover:text-foreground">Reset</button>
+            </div>
+          )}
         </div>
         {/* shared GalleryLightbox for the selected gallery */}
         <GalleryLightbox
@@ -300,11 +356,12 @@ const ProductShowcase = () => {
           open={activeGallery !== null}
           onClose={() => { setActiveGallery(null); setPhotoIndex(0); }}
           leftPanel={activeGallery !== null ? <PhotoLeftPanel /> : null}
+          hidePanelBelow={600}
         />
 
-  <div className="grid md:grid-cols-2 gap-8 items-stretch">
-      {galleries.filter(g => !categoryFilter || g.category === categoryFilter).map((gallery, index) => (
-            <AnimatedWrapper key={gallery.title} delay={`${index * 100}ms`}>
+  <div className="grid md:grid-cols-2 gap-8 items-stretch filter-anim-container">
+      {galleries.filter(g => (categoryFilters.length === 0 || categoryFilters.includes(g.category))).map((gallery, index) => (
+            <AnimatedWrapper key={gallery.title} delay={`${index * 60}ms`} className="anim-filter-enter">
   <FlipCard disableOverlay isFlipped={openIndex === index} onToggle={() => setOpenIndex(openIndex === index ? null : index)} className="group h-full flex flex-col">
                 <div className="group flex flex-col h-full">
                   <div className="overflow-hidden mb-4">

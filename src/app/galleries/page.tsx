@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { allGalleryImages, galleries } from '@/data/galleries';
 import GalleryLightbox from '@/components/ui/gallery-lightbox';
 import AnimatedWrapper from '@/components/ui/animated-wrapper';
@@ -11,11 +11,16 @@ const allImages = allGalleryImages();
 export default function GalleriesPage() {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
-  const [category, setCategory] = useState<string>('');
+  const [selectedCats, setSelectedCats] = useState<string[]>([]);
 
-  const categories = Array.from(new Set(galleries.map(g => g.category)));
+  const categories = useMemo(() => Array.from(new Set(galleries.map(g => g.category))), []);
 
-  const filteredImages = category ? allImages.filter(i => i.category === category) : allImages;
+  const toggleCat = (cat: string) => {
+    setSelectedCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
+    setIndex(0);
+  };
+  const clearCats = () => { setSelectedCats([]); setIndex(0); };
+  const filteredImages = selectedCats.length ? allImages.filter(i => selectedCats.includes(i.category)) : allImages;
 
   // items for lightbox (map to shape expected by GalleryLightbox)
   const items = filteredImages.map(img => ({
@@ -42,19 +47,39 @@ export default function GalleriesPage() {
           <h1 className="text-4xl md:text-6xl font-bold mb-6">All Galleries</h1>
           <p className="text-muted-foreground max-w-2xl mb-12">A consolidated view of every featured gallery. Click any thumbnail to open the immersive lightbox experience and navigate through all images seamlessly.</p>
         </AnimatedWrapper>
-        <div className="mb-8 flex flex-wrap gap-2 items-center">
-          <span className="text-sm text-muted-foreground">Filter:</span>
-          <button onClick={() => { setCategory(''); setIndex(0); }} className={`px-3 py-1 rounded-md text-sm transition ${category === '' ? 'bg-foreground text-background' : 'bg-muted-foreground/10 hover:bg-muted-foreground/20'}`}>All</button>
-          {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => { setCategory(cat); setIndex(0); }}
-              className={`px-3 py-1 rounded-md text-sm transition ${category === cat ? 'bg-foreground text-background' : 'bg-muted-foreground/10 hover:bg-muted-foreground/20'}`}
-            >{cat}</button>
-          ))}
-          <span className="ml-auto text-xs text-muted-foreground">{filteredImages.length} images</span>
+        <div className="mb-8 space-y-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-sm text-muted-foreground">Filter:</span>
+            <button onClick={clearCats} className={`px-3 py-1 rounded-md text-sm transition ${selectedCats.length === 0 ? 'bg-foreground text-background' : 'bg-muted-foreground/10 hover:bg-muted-foreground/20'}`}>All</button>
+            {categories.map(cat => {
+              const active = selectedCats.includes(cat);
+              return (
+                <button
+                  key={cat}
+                  onClick={() => toggleCat(cat)}
+                  aria-pressed={active}
+                  className={`px-3 py-1 rounded-md text-sm border transition ${active ? 'bg-foreground text-background border-foreground' : 'bg-muted-foreground/10 hover:bg-muted-foreground/20 border-transparent'}`}
+                >{cat}</button>
+              );
+            })}
+            {selectedCats.length > 0 && (
+              <button onClick={clearCats} className="text-xs ml-2 underline text-muted-foreground hover:text-foreground">Clear</button>
+            )}
+            <span className="ml-auto text-xs text-muted-foreground">{filteredImages.length} images</span>
+          </div>
+          {selectedCats.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              {selectedCats.map(cat => (
+                <span key={cat} className="flex items-center gap-1 bg-foreground/5 border border-foreground/20 rounded-full px-3 py-1 text-xs anim-filter-enter">
+                  {cat}
+                  <button aria-label={`Remove ${cat}`} onClick={() => toggleCat(cat)} className="hover:text-destructive focus:outline-none">×</button>
+                </span>
+              ))}
+              <button onClick={clearCats} className="text-xs text-muted-foreground hover:text-foreground">Reset</button>
+            </div>
+          )}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 filter-anim-container">
           {filteredImages.map((img, i) => (
             <GalleryThumb
               key={img.src + i}
