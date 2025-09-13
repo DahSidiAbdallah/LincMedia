@@ -163,7 +163,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   // track the last elements we mutated and their previous inline styles so we can restore them
   let lastContainer: HTMLElement | null = null;
   let lastZoomWrap: HTMLElement | null = null;
-  let prevContainerStyles: { left?: string | null; width?: string | null; paddingLeft?: string | null; zoomMaxWidth?: string | null; zoomMarginLeft?: string | null; transform?: string | null; scrollWrapLeft?: string | null; scrollWrapWidth?: string | null } = {};
+  let prevContainerStyles: { left?: string | null; width?: string | null; paddingLeft?: string | null; paddingRight?: string | null; zoomMaxWidth?: string | null; zoomMarginLeft?: string | null; transform?: string | null; scrollWrapLeft?: string | null; scrollWrapWidth?: string | null } = {};
   let lastScrollWrap: HTMLElement | null = null;
   let lastVideoEl: HTMLVideoElement | null = null;
   // ensure we only apply the panel layout after PhotoSwipe has finished its initial sizing
@@ -202,12 +202,26 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       if (!prevContainerStyles.paddingLeft) {
         prevContainerStyles.paddingLeft = container.style.paddingLeft || null;
       }
+      if (!prevContainerStyles.left) {
+        prevContainerStyles.left = container.style.left || null;
+      }
+      if (!prevContainerStyles.width) {
+        prevContainerStyles.width = container.style.width || null;
+      }
+      if (!prevContainerStyles.paddingRight) {
+        prevContainerStyles.paddingRight = container.style.paddingRight || null;
+      }
       // Shift only if not hidden
       container.style.paddingLeft = shouldHidePanel ? '0px' : panelWidth + 'px';
       // compensate for right thumbnail strip if present
       const rightStrip = document.querySelector('.pswp-right-thumbs') as HTMLElement | null;
       const rightW = rightStrip ? rightStrip.getBoundingClientRect().width + 16 : 0; // include margin breathing room
       container.style.paddingRight = rightW ? rightW + 'px' : '0px';
+      // position container so stage doesn't overlap left panel / right strip
+      const totalLeft = shouldHidePanel ? 0 : panelWidth;
+      const totalRight = rightW;
+      container.style.left = totalLeft + 'px';
+      container.style.width = `calc(100% - ${totalLeft + totalRight}px)`;
       try { container.style.setProperty('--pswp-right-strip-width', rightW + 'px'); } catch {}
       // expose a CSS var so global styles can position default controls (e.g., prev arrow)
       try { (container as HTMLElement).style.setProperty('--pswp-left-panel-width', panelWidth + 'px'); } catch {}
@@ -394,7 +408,12 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       // shift the PhotoSwipe content area to the right so the left panel does not overlap images (only first time)
       try {
         if (container) {
-          prevContainerStyles = { paddingLeft: container.style.paddingLeft || null };
+          prevContainerStyles = {
+            left: container.style.left || null,
+            width: container.style.width || null,
+            paddingLeft: container.style.paddingLeft || null,
+            paddingRight: container.style.paddingRight || null,
+          };
           applyPanelLayout(container);
           lastContainer = container;
           // progress bar removed
@@ -435,6 +454,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           if (prevContainerStyles.left) lastContainer.style.left = prevContainerStyles.left;
           if (prevContainerStyles.width) lastContainer.style.width = prevContainerStyles.width;
           if (prevContainerStyles.paddingLeft) lastContainer.style.paddingLeft = prevContainerStyles.paddingLeft;
+          if (prevContainerStyles.paddingRight) lastContainer.style.paddingRight = prevContainerStyles.paddingRight;
           lastContainer = null;
         }
         prevContainerStyles = {};
