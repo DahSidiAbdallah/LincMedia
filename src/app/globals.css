@@ -93,5 +93,27 @@ html {
 
 /* Keep next arrow tight to the right edge for consistency */
 .pswp .pswp__button--arrow--next {
-  right: 12px !important;
+  right: calc(var(--pswp-right-strip-width, 0px) + 12px) !important;
 }
+
+/* Filter transition animations */
+@keyframes filter-fade-scale-in {
+  0% { opacity: 0; transform: scale(.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes filter-fade-scale-out {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.97); }
+}
+
+.anim-filter-enter {
+  animation: filter-fade-scale-in 300ms var(--filter-stagger, 0ms) cubic-bezier(.22,.61,.36,1) both;
+}
+.anim-filter-exit {
+  animation: filter-fade-scale-out 180ms ease both;
+}
+
+.filter-anim-container {
+  position: relative;
+}
+

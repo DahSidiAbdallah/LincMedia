@@ -28,11 +28,13 @@ interface GalleryLightboxProps {
   index?: number;
   open?: boolean;
   onClose?: () => void;
-  // optional React node to render as the left-side panel (e.g. flip-card back content)
   leftPanel?: React.ReactNode;
+  category?: string;
+  // width (px) below which the left panel is hidden & padding removed
+  hidePanelBelow?: number;
 }
 
-const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, open = false, onClose, leftPanel }) => {
+const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, open = false, onClose, leftPanel, category, hidePanelBelow = 560 }) => {
   // keep a weakly-typed ref without using raw `any` to satisfy lint
   const pswpRef = React.useRef<unknown>(null);
   const placeholderRef = React.useRef<HTMLDivElement | null>(null);
@@ -40,7 +42,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   React.useEffect(() => {
     if (!placeholderRef.current) return;
 
-    const dataSource = items.map((it) => {
+  const dataSource = items.map((it) => {
       // Build title/exif HTML
       const captionHtml = it.caption ? `<div class=\"pswp-caption\"><strong>${it.caption}</strong></div>` : '';
       let exifHtml = '';
@@ -87,13 +89,34 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       };
     });
 
+    // Rebuild placeholder anchor children for accessibility / PhotoSwipe binding
+    try {
+      if (placeholderRef.current) {
+        placeholderRef.current.innerHTML = '';
+        dataSource.forEach((ds: any, idx: number) => {
+          const a = document.createElement('a');
+          a.href = ds.src || '#';
+          a.setAttribute('data-pswp-width', (ds.w || 1600).toString());
+          a.setAttribute('data-pswp-height', (ds.h || 1200).toString());
+          a.setAttribute('data-pswp-index', idx.toString());
+          a.setAttribute('tabindex', idx === 0 ? '0' : '-1');
+          a.setAttribute('aria-label', ds.title ? `Open slide ${idx + 1}: ${ds.title}` : `Open slide ${idx + 1}`);
+          const span = document.createElement('span');
+          span.className = 'sr-only';
+          span.textContent = ds.title || `Slide ${idx + 1}`;
+          a.appendChild(span);
+          placeholderRef.current!.appendChild(a);
+        });
+      }
+    } catch {}
+
     const lightbox = new PhotoSwipeLightbox({
       dataSource,
       pswpModule: () => import('photoswipe'),
       gallery: placeholderRef.current as any,
       children: 'a',
       showHideAnimationType: 'zoom',
-      paddingFn: (viewportSize) => ({ top: 44, bottom: 44, left: 44, right: 44 }),
+      paddingFn: () => ({ top: 44, bottom: 44, left: 44, right: 44 }),
     });
 
     pswpRef.current = lightbox;
@@ -110,6 +133,22 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         try { api?.prev?.(); } catch {}
       } else if (e.key === 'ArrowRight') {
         try { api?.next?.(); } catch {}
+      } else if (e.key.toLowerCase() === 'i' || e.key.toLowerCase() === 'f') {
+        try { window.dispatchEvent(new CustomEvent('pswp-toggle-info')); } catch {}
+      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        try { toggleHelp(); } catch {}
+      } else if (e.key.toLowerCase() === 'c') {
+        try {
+          const cat = (window as any).__photoSwipeCategory;
+          const all: any[] = (window as any).__photoSwipeItems || [];
+          const current = (window as any).__photoSwipeCurrentIndex || 0;
+          if (cat && all.length > 1) {
+            for (let off = 1; off < all.length; off++) {
+              const ni = (current + off) % all.length;
+              if (all[ni]?.category === cat) { api?.goTo?.(ni); break; }
+            }
+          }
+        } catch {}
       }
     };
 
@@ -120,6 +159,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   let overlayEl: HTMLDivElement | null = null;
   let panelRoot: ReactDOM.Root | null = null;
   let panelContainer: HTMLDivElement | null = null;
+  let rightThumbStrip: HTMLDivElement | null = null;
   // track the last elements we mutated and their previous inline styles so we can restore them
   let lastContainer: HTMLElement | null = null;
   let lastZoomWrap: HTMLElement | null = null;
@@ -155,15 +195,29 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
     const applyPanelLayout = (container: HTMLElement | null) => {
       if (!container || !panelContainer) return;
+      const shouldHidePanel = window.innerWidth < hidePanelBelow;
+      panelContainer.style.display = shouldHidePanel ? 'none' : 'flex';
       const panelWidth = computePanelWidth();
       panelContainer.style.width = panelWidth + 'px';
       if (!prevContainerStyles.paddingLeft) {
         prevContainerStyles.paddingLeft = container.style.paddingLeft || null;
       }
-      // Shift PhotoSwipe content to the right and expose width as a CSS variable
-      container.style.paddingLeft = panelWidth + 'px';
+      // Shift only if not hidden
+      container.style.paddingLeft = shouldHidePanel ? '0px' : panelWidth + 'px';
+      // compensate for right thumbnail strip if present
+      const rightStrip = document.querySelector('.pswp-right-thumbs') as HTMLElement | null;
+      const rightW = rightStrip ? rightStrip.getBoundingClientRect().width + 16 : 0; // include margin breathing room
+      container.style.paddingRight = rightW ? rightW + 'px' : '0px';
+      try { container.style.setProperty('--pswp-right-strip-width', rightW + 'px'); } catch {}
       // expose a CSS var so global styles can position default controls (e.g., prev arrow)
       try { (container as HTMLElement).style.setProperty('--pswp-left-panel-width', panelWidth + 'px'); } catch {}
+      // additionally nudge the inner scroll wrap to ensure stage starts after panel (defensive for theme styles)
+      try {
+        const scrollWrap = container.querySelector('.pswp__scroll-wrap') as HTMLElement | null;
+        if (scrollWrap) scrollWrap.style.marginLeft = '0';
+        const containerEl = container.querySelector('.pswp__container') as HTMLElement | null;
+        if (containerEl) containerEl.style.marginLeft = '0';
+      } catch {}
       try { (pswpRef.current as any)?.pswp?.updateSize?.(true); } catch {}
     };
 
@@ -182,7 +236,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     overlayEl.className = 'pswp-extra-overlay flex items-start justify-start';
     overlayEl.style.position = 'fixed';
     overlayEl.style.inset = '0';
-    overlayEl.style.zIndex = '9999999';
+  overlayEl.style.zIndex = '2147483000';
     overlayEl.style.pointerEvents = 'none';
 
     const controls = document.createElement('div');
@@ -191,10 +245,11 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     controls.style.position = 'relative';
     controls.style.margin = '0';
       controls.innerHTML = `
-        <button data-pswp-meta class="pswp-btn">Info</button>
+        <button data-pswp-meta class="pswp-btn" title="(I/F) Toggle Info">Info</button>
         <button data-pswp-download class="pswp-btn">Download</button>
         <button data-pswp-print class="pswp-btn">Print</button>
         <button data-pswp-share class="pswp-btn">Share</button>
+        <button data-pswp-help class="pswp-btn" title="(?) Keyboard Help">?</button>
       `;
 
       // metadata panel (hosts a React-rendered left panel if provided)
@@ -211,7 +266,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     panelContainer.style.borderRight = '1px solid rgba(255,255,255,0.15)';
     panelContainer.style.boxSizing = 'border-box';
     panelContainer.style.padding = '20px 16px 12px 20px';
-    panelContainer.style.zIndex = '10000000';
+  panelContainer.style.zIndex = '2147483646';
     panelContainer.style.background = 'rgba(15,15,15,0.78)';
     panelContainer.style.backdropFilter = 'blur(12px)';
     panelContainer.style.overflow = 'auto';
@@ -239,6 +294,48 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   // if a leftPanel React node is provided, we'll render it into the panelContainer
   if (!reuse || !overlayEl.parentElement) {
     overlayEl.appendChild(panelContainer);
+    if (!rightThumbStrip) {
+      rightThumbStrip = document.createElement('div');
+      rightThumbStrip.className = 'pswp-right-thumbs';
+      Object.assign(rightThumbStrip.style, {
+        position: 'fixed', top: '56px', right: '8px', width: '260px', maxHeight: '190px',
+        overflowY: 'auto', zIndex: '2147483600', display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill,minmax(48px,1fr))', gap: '4px',
+        padding: '6px 6px 8px', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
+        borderRadius: '6px'
+      } as CSSStyleDeclaration);
+      rightThumbStrip.setAttribute('aria-label','Slide thumbnails');
+      const buildThumbs = () => {
+        rightThumbStrip!.innerHTML = '';
+        items.forEach((thumbIt, ti) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+            btn.style.position='relative'; btn.style.padding='0'; btn.style.border='1px solid transparent';
+            btn.style.aspectRatio='1/1'; btn.style.overflow='hidden'; btn.style.borderRadius='4px'; btn.style.cursor='pointer'; btn.style.background='#111';
+          btn.dataset.index = ti.toString();
+          btn.setAttribute('aria-label', `Go to slide ${ti+1}`);
+          const img = document.createElement('img');
+          img.src = thumbIt.video?.poster || thumbIt.src || '';
+          img.alt = thumbIt.title || '';
+          Object.assign(img.style, { width: '100%', height: '100%', objectFit: 'cover', opacity: '.75', transition: 'opacity 140ms' });
+          btn.appendChild(img);
+          btn.addEventListener('click', () => {
+            try { const api = (window as any)?.__photoSwipeInstance; if (api?.goTo) api.goTo(ti); } catch {}
+          });
+          btn.addEventListener('mouseenter', () => { img.style.opacity='1'; });
+          btn.addEventListener('mouseleave', () => { if (!btn.classList.contains('active')) img.style.opacity='.75'; });
+          rightThumbStrip!.appendChild(btn);
+        });
+      };
+      buildThumbs();
+      document.body.appendChild(rightThumbStrip);
+      const syncActive = (idx: number) => {
+        if (!rightThumbStrip) return; const children = Array.from(rightThumbStrip.querySelectorAll('button')) as HTMLButtonElement[];
+        children.forEach((c,i)=>{ c.classList.toggle('active', i===idx); c.style.borderColor = i===idx ? 'white' : 'transparent'; const img=c.querySelector('img') as HTMLImageElement|null; if(img) img.style.opacity = i===idx ? '1' : '.55'; });
+        const active = children[idx]; if(active){ const r=active.getBoundingClientRect(); const pr=rightThumbStrip.getBoundingClientRect(); if(r.top<pr.top||r.bottom>pr.bottom){ rightThumbStrip.scrollTo({ top: active.offsetTop-20, behavior:'smooth' }); }}
+      };
+      window.addEventListener('pswp-slide-change', (ev: any) => { const ci = typeof ev.detail?.index === 'number' ? ev.detail.index : 0; syncActive(ci); });
+    }
     // controls live inside a sticky footer in the panel
     const footer = document.createElement('div');
     footer.className = 'pswp-panel-footer';
@@ -277,6 +374,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           showToast('Image URL copied to clipboard');
         }
       });
+      controls.querySelector('[data-pswp-help]')?.addEventListener('click', () => toggleHelp());
 
       // info button flips the card inside the panel via a custom event
       controls.querySelector('[data-pswp-meta]')?.addEventListener('click', () => {
@@ -299,6 +397,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           prevContainerStyles = { paddingLeft: container.style.paddingLeft || null };
           applyPanelLayout(container);
           lastContainer = container;
+          // progress bar removed
         }
       } catch {}
     };
@@ -342,26 +441,31 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       } catch {}
     };
 
+    // Debounced resize handling
+    let resizeTimer: number | null = null;
     const onResize = () => {
-      try {
-        const container = (pswpRef.current as any)?.pswp?.el || null;
-        applyPanelLayout(container);
-        try { (pswpRef.current as any)?.pswp?.updateSize?.(true); } catch {}
-      } catch {}
+      if (resizeTimer) window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        try {
+          const container = (pswpRef.current as any)?.pswp?.el || null;
+          applyPanelLayout(container);
+          try { (pswpRef.current as any)?.pswp?.updateSize?.(true); } catch {}
+        } catch {}
+      }, 120);
     };
-
     window.addEventListener('resize', onResize);
 
     (lightbox as any).on('open', (e: any) => {
       try {
-    // signal other UI (flip-cards) that photoswipe is open to avoid duplicate overlays
-    try { (window as any).__photoSwipeOpen = true; } catch {}
-  const container = (pswpRef.current as any)?.pswp?.el || null;
-        createOverlay(e?.detail?.index ?? index, container);
-        // mount React leftPanel if provided
+        // signal other UI (flip-cards) that photoswipe is open
+        try { (window as any).__photoSwipeOpen = true; } catch {}
+        const container = (pswpRef.current as any)?.pswp?.el || null;
+        const startIndex = e?.detail?.index ?? index;
+        // mount panel BEFORE creating overlay so initial slide-change event is received by React panel
         if (leftPanel) {
           mountPanel(leftPanel);
         }
+        createOverlay(startIndex, container);
         try { (window as any).__photoSwipeInstance = (pswpRef.current as any)?.pswp || (pswpRef.current as any); } catch {}
         // defer layout shift so PhotoSwipe can calculate initial bounds first
         if (container) {
@@ -376,6 +480,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         }
         // fade-in first visible media
         if (container) applyPanelLayout(container);
+  // progress bar removed
         try {
           const current = container?.querySelector('.pswp__item:not(.pswp__item--hidden) *:is(img,video)') as HTMLElement | null;
           if (current) {
@@ -395,6 +500,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         // pause any previous video
         try { lastVideoEl?.pause(); } catch {}
         createOverlay(e?.detail?.index ?? 0, container, true);
+  // progress bar removed
         if (leftPanel && panelContainer && !panelRoot) {
           // if React panel not mounted yet, mount it once
           mountPanel(leftPanel);
@@ -417,11 +523,14 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       try { (window as any).__photoSwipeOpen = false; (window as any).__photoSwipeCurrentItem = null; (window as any).__photoSwipeCurrentIndex = null; } catch {}
       dispatchSlideChange({ item: null, index: null });
       restoreContainerStyles();
-      if (overlayEl) { overlayEl.remove(); overlayEl = null; }
+  if (overlayEl) { overlayEl.remove(); overlayEl = null; }
+  if (rightThumbStrip) { try { rightThumbStrip.remove(); } catch {}; rightThumbStrip = null; }
+  // progress bar removed
       // defer unmount to avoid synchronous root unmount during render
       requestAnimationFrame(() => setTimeout(() => unmountPanel(), 0));
       try { (window as any).__photoSwipeInstance = (pswpRef.current as any)?.pswp || (pswpRef.current as any); } catch {}
       onClose?.();
+      try { hideHelp(); } catch {}
     });
 
     if (open) {
@@ -432,14 +541,43 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       document.removeEventListener('keydown', onKey);
       // ensure we restore any container styles when cleaning up
       try { restoreContainerStyles(); } catch {}
-      if (overlayEl) overlayEl.remove();
-      window.removeEventListener('resize', onResize);
+  if (overlayEl) overlayEl.remove();
+  if (rightThumbStrip) { try { rightThumbStrip.remove(); } catch {}; rightThumbStrip = null; }
+  // progress bar removed
+  window.removeEventListener('resize', onResize);
       lightbox.destroy();
       pswpRef.current = null;
     };
   }, [items, index, open, onClose]);
 
-  return <div ref={placeholderRef} aria-hidden style={{ display: 'block' }} />;
+  function toggleHelp() { (window as any).__pswpHelpVisible ? hideHelp() : showHelp(); }
+  function showHelp() {
+    if ((window as any).__pswpHelpVisible) return;
+    const help = document.createElement('div');
+    help.id = 'pswp-help';
+    help.role = 'dialog';
+    help.setAttribute('aria-modal', 'false');
+    help.className = 'fixed bottom-4 right-4 max-w-sm text-sm bg-black/80 text-white p-4 rounded shadow-lg z-[2147483647] space-y-2';
+    help.innerHTML = `
+      <div class='font-semibold mb-1'>Keyboard Shortcuts</div>
+      <ul class='list-disc pl-4 space-y-1'>
+        <li><strong>Esc</strong> Close</li>
+        <li><strong>←/→</strong> Prev / Next</li>
+        <li><strong>I / F</strong> Toggle Info Panel</li>
+        <li><strong>C</strong> Next in Same Category</li>
+        <li><strong>?</strong> Toggle Help</li>
+      </ul>`;
+    document.body.appendChild(help);
+    (window as any).__pswpHelpVisible = true;
+  }
+  function hideHelp() {
+    const el = document.getElementById('pswp-help');
+    if (el) el.remove();
+    (window as any).__pswpHelpVisible = false;
+  }
+
+  return <div ref={placeholderRef} aria-label="Lightbox gallery" role="region" style={{ display: 'block' }} />;
+  // NOTE: replaced by semantic section would be better; kept div for minimal change. Lint rule flagged earlier.
 };
 
 export default GalleryLightbox;
