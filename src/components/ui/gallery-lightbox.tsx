@@ -5,14 +5,73 @@ import PhotoSwipeLightbox from 'photoswipe/lightbox';
 import 'photoswipe/style.css';
 import ReactDOM from 'react-dom/client';
 
+// ---------------------------------------------------------------------------
+// Type scaffolding for gallery-lightbox
+// ---------------------------------------------------------------------------
+// We model only the subset of PhotoSwipeLightbox + internal instance we use to
+// avoid pulling deep library internals. This keeps our surface stable even if
+// upstream adds properties.
+
+interface PswpInstanceMinimal {
+  el?: HTMLElement | null;
+  currIndex?: number;
+  goTo?: (index: number) => void;
+  updateSize?: (force?: boolean) => void;
+  destroy?: () => void;
+}
+
+interface LightboxControllerMinimal {
+  pswp?: PswpInstanceMinimal | null;
+  loadAndOpen: (index: number) => void;
+  init?: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PhotoSwipe event signatures vary
+  on: (name: string, cb: (...args: unknown[]) => void) => void;
+  destroy?: () => void;
+}
+
+export interface ExifData {
+  aperture?: string | number;
+  focalLength?: string | number;
+  iso?: string | number;
+  shutter?: string | number;
+  [k: string]: string | number | undefined;
+}
+
+// (SlideChangeDetail interface removed – events use inline detail typing)
+
+declare global {
+  interface Window {
+    __photoSwipeOpen?: boolean;
+    __photoSwipeCurrentItem?: Item | null;
+    __photoSwipeCurrentIndex?: number | null;
+    __photoSwipeTotal?: number | null;
+    __photoSwipeItems?: Item[];
+    __photoSwipeCategory?: string | null;
+    __photoSwipeInstance?: PswpInstanceMinimal | LightboxControllerMinimal | null;
+    __pswpHelpVisible?: boolean;
+    forceCreatePswpCollapseHandle?: () => void;
+  }
+}
+
+// Helper narrowing utility to access the lightbox controller.
+function getLightbox(ref: React.MutableRefObject<unknown>): LightboxControllerMinimal | null {
+  return (ref.current as LightboxControllerMinimal) || null;
+}
+
+// Helper to safely access the underlying pswp instance.
+function getPswp(ref: React.MutableRefObject<unknown>): PswpInstanceMinimal | null {
+  return ((ref.current as LightboxControllerMinimal)?.pswp) || null;
+}
+
 type Item = {
   src?: string; // image source (optional if video/html provided)
   w?: number;
   h?: number;
   title?: string;
   caption?: string;
-  exif?: Record<string, any> | null;
+  exif?: ExifData | null;
   blurDataURL?: string | null;
+  category?: string; // optional categorization used for jumpNextSameCategory
   // simple video support
   video?: {
     src: string;
@@ -23,19 +82,29 @@ type Item = {
   html?: string;
 };
 
+export type GalleryLightboxItem = Item; // public re-exportable alias
+
+// Internal datasource shape passed to PhotoSwipe
+interface DataSourceMediaItem {
+  src?: string;
+  html?: string;
+  w: number;
+  h: number;
+  title: string;
+}
+
 interface GalleryLightboxProps {
   items: Item[];
   index?: number;
   open?: boolean;
   onClose?: () => void;
   leftPanel?: React.ReactNode;
-  category?: string;
   // width (px) below which the left panel is hidden & padding removed
   hidePanelBelow?: number;
 }
 
-const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, open = false, onClose, leftPanel, category, hidePanelBelow = 640 }) => {
-  // keep a weakly-typed ref without using raw `any` to satisfy lint
+const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, open = false, onClose, leftPanel, hidePanelBelow = 640 }) => {
+  // opaque ref to third-party lightbox controller
   const pswpRef = React.useRef<unknown>(null);
   const placeholderRef = React.useRef<HTMLDivElement | null>(null);
   const liveRegionRef = React.useRef<HTMLDivElement | null>(null);
@@ -71,7 +140,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     return { captionHtml, exifHtml, titleHtml: `${captionHtml}${exifHtml}` };
   };
 
-  const buildVideoHtml = (it: Item, titleHtml: string) => {
+  const buildVideoHtml = (it: Item, titleHtml: string): DataSourceMediaItem => {
     const posterAttr = it.video?.poster ? `poster="${it.video.poster}"` : '';
     const typeAttr = it.video?.type ? `type="${it.video.type}"` : 'type="video/mp4"';
     const html = it.html || `
@@ -81,17 +150,17 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           Your browser does not support the video tag.
         </video>
       </div>`;
-    return { html, w: it.w || 1600, h: it.h || 900, title: titleHtml || it.title || '' } as any;
+    return { html, w: it.w || 1600, h: it.h || 900, title: titleHtml || it.title || '' };
   };
 
-  const buildDataSourceItem = (it: Item) => {
+  const buildDataSourceItem = (it: Item): DataSourceMediaItem => {
     const { titleHtml } = buildTitleFragments(it);
     if (it.video) return buildVideoHtml(it, titleHtml);
-    if (it.html) return { html: it.html, w: it.w || 1600, h: it.h || 1200, title: titleHtml || it.title || '' } as any;
+    if (it.html) return { html: it.html, w: it.w || 1600, h: it.h || 1200, title: titleHtml || it.title || '' };
     return { src: it.src!, w: it.w || 1600, h: it.h || 1200, title: titleHtml || it.title || '' };
   };
 
-  const buildDataSource = (items: Item[]) => items.map(buildDataSourceItem);
+  const buildDataSource = (items: Item[]): DataSourceMediaItem[] => items.map(buildDataSourceItem);
 
   const dataSource = buildDataSource(items);
 
@@ -99,7 +168,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     try {
       if (placeholderRef.current) {
         placeholderRef.current.innerHTML = '';
-        dataSource.forEach((ds: any, idx: number) => {
+  dataSource.forEach((ds: DataSourceMediaItem, idx: number) => {
           const a = document.createElement('a');
           a.href = ds.src || '#';
           a.setAttribute('data-pswp-width', (ds.w || 1600).toString());
@@ -116,25 +185,26 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       }
     } catch {}
 
-    const lightbox = new PhotoSwipeLightbox({
+    const lightbox: LightboxControllerMinimal = new PhotoSwipeLightbox({
       dataSource,
       pswpModule: () => import('photoswipe'),
-      gallery: placeholderRef.current as any,
+      gallery: placeholderRef.current as HTMLElement,
       children: 'a',
       showHideAnimationType: 'zoom',
       paddingFn: () => ({ top: 44, bottom: 44, left: 44, right: 44 }),
-    });
+    }) as unknown as LightboxControllerMinimal;
 
     pswpRef.current = lightbox;
-    lightbox.init();
+  // Init may be optional in narrowed controller interface
+  try { lightbox.init?.(); } catch {}
 
     // Keyboard shortcuts (reduced branching complexity)
     const jumpNextSameCategory = () => {
       try {
-        const api = (pswpRef.current as any)?.pswp;
-        const cat = (window as any).__photoSwipeCategory;
-        const all: any[] = (window as any).__photoSwipeItems || [];
-        const current = (window as any).__photoSwipeCurrentIndex || 0;
+  const api = getPswp(pswpRef);
+  const cat = window.__photoSwipeCategory;
+  const all: Item[] = window.__photoSwipeItems || [];
+  const current = window.__photoSwipeCurrentIndex || 0;
         if (cat && all.length > 1) {
           for (let off = 1; off < all.length; off++) {
             const ni = (current + off) % all.length;
@@ -148,7 +218,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       try {
         const { overlayMode } = getLayoutState();
         if (overlayMode && !panelCollapsed) {
-          setPanelCollapsed(true, (pswpRef.current as any)?.pswp?.el || null);
+          setPanelCollapsed(true, getPswp(pswpRef)?.el || null);
           return;
         }
       } catch {}
@@ -168,6 +238,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
     lightbox.on('close', () => onClose?.());
 
+  // mutable refs for DOM nodes created procedurally
   let overlayEl: HTMLDivElement | null = null;
   let panelRoot: ReactDOM.Root | null = null;
   let panelContainer: HTMLDivElement | null = null;
@@ -183,7 +254,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   let collapseHandleObserver: MutationObserver | null = null;
   // NEW: collapse + flip-card state (lives within effect scope, resets each open)
   let panelCollapsed = false;
-  let cardFlipped = false;
+  // removed unused: cardFlipped (flip state handled via DOM class only)
   const panelRailWidth = 52; // width when collapsed (rail with icon)
 
   // Accessibility / UX enhancement refs
@@ -222,7 +293,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
   const setPanelCollapsed = (val: boolean, container?: HTMLElement | null) => {
     panelCollapsed = val;
-    if (panelContainer) {
+  if (panelContainer) {
       panelContainer.setAttribute('data-collapsed', String(panelCollapsed));
     }
     // when expanding, unflip card automatically
@@ -287,8 +358,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           panelContainer.removeAttribute('aria-labelledby');
           return;
         }
-        const idx = typeof currentIndex === 'number' ? currentIndex : (window as any).__photoSwipeCurrentIndex;
-        const total = (window as any).__photoSwipeTotal || items.length;
+  const idx = typeof currentIndex === 'number' ? currentIndex : window.__photoSwipeCurrentIndex;
+  const total = window.__photoSwipeTotal || items.length;
         let label = 'Image details';
         if (typeof idx === 'number' && idx >= 0) {
           const item = items[idx];
@@ -305,7 +376,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     };
 
     // Ensure the floating collapse handle exists & is positioned
-    const ensureCollapseHandle = (container: HTMLElement | null, activePanelWidth: number, shouldHidePanel: boolean) => {
+  const ensureCollapseHandle = (container: HTMLElement | null, activePanelWidth: number) => {
       if (window.innerWidth < hidePanelBelow) { // hide on sheet mode
         if (collapseHandle) {
           collapseHandle.style.opacity = '0';
@@ -343,7 +414,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     };
 
     const styleOverlayContentOffsets = (container: HTMLElement, leftOffset: number, overlayMode: boolean) => {
-  const q = (sel: string) => container.querySelector<HTMLElement>(sel);
+  const q = (sel: string): HTMLElement | null => container.querySelector<HTMLElement>(sel);
       const scrollWrap = q('.pswp__scroll-wrap');
       if (scrollWrap) {
         scrollWrap.style.position = 'relative';
@@ -415,13 +486,14 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       }
     };
 
+
     // ---- Bottom Sheet Gesture + Animation (mobile overlay mode) ----
-    let sheetGesturesAttached = false;
-    let isDraggingSheet = false;
-    let dragStartY = 0;
-    let dragStartHeight = 0;
-    let lastDragTime = 0;
-    let lastDragY = 0;
+  let sheetGesturesAttached = false;
+  let isDraggingSheet = false;
+  let dragStartY = 0;
+  let dragStartHeight = 0;
+  let lastDragTime = 0;
+  let lastDragY = 0;
   let pendingDragHeight: number | null = null;
   let dragRaf = 0;
     const collapsedHeight = 52; // px (matches stylePanelForMode)
@@ -448,7 +520,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           panelContainer.style.transition = '';
           panelContainer.style.height = target + 'px';
           panelContainer.style.padding = expand ? '14px 18px 16px 18px' : '6px 12px 6px 12px';
-          try { applyPanelLayout((pswpRef.current as any)?.pswp?.el || null); } catch {}
+          try { applyPanelLayout(getPswp(pswpRef)?.el || null); } catch {}
           return;
         }
         panelContainer.style.transition = 'height 280ms cubic-bezier(.4,0,.2,1), padding 220ms ease';
@@ -467,7 +539,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           panelContainer.removeEventListener('transitionend', done);
           panelContainer.style.transition = '';
           panelContainer.style.willChange = '';
-          try { applyPanelLayout((pswpRef.current as any)?.pswp?.el || null); } catch {}
+          try { applyPanelLayout(getPswp(pswpRef)?.el || null); } catch {}
         };
         panelContainer.addEventListener('transitionend', done);
       } catch {}
@@ -475,7 +547,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
     const applyCollapsedStateAnimated = () => {
       const { overlayMode } = getLayoutState();
-      if (!overlayMode) { applyPanelLayout((pswpRef.current as any)?.pswp?.el || null); return; }
+  if (!overlayMode) { applyPanelLayout(getPswp(pswpRef)?.el || null); return; }
       clampExpandedHeight();
       const target = panelCollapsed ? collapsedHeight : sheetExpandedHeight;
       animateSheetTo(target, !panelCollapsed);
@@ -497,7 +569,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       if (!panelContainer) return;
       // remove existing listener if any
       if (sheetKeydownListener) {
-        panelContainer.removeEventListener('keydown', sheetKeydownListener as any);
+  panelContainer.removeEventListener('keydown', sheetKeydownListener as EventListener);
         sheetKeydownListener = null;
       }
       if (!(overlayMode && !panelCollapsed)) return; // only active when expanded sheet
@@ -528,7 +600,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           }
         }
       };
-      panelContainer.addEventListener('keydown', sheetKeydownListener as any);
+  panelContainer.addEventListener('keydown', sheetKeydownListener as EventListener);
       // If focus is outside panel when expanding, move it in
       if (!panelContainer.contains(document.activeElement)) {
         const focusables = getFocusable();
@@ -543,7 +615,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     const updateBackgroundInert = () => {
       try {
         const { overlayMode } = getLayoutState();
-        const pswpEl = (pswpRef.current as any)?.pswp?.el as HTMLElement | undefined;
+  const pswpEl = getPswp(pswpRef)?.el as HTMLElement | undefined;
         if (!pswpEl) return;
         const makeInert = overlayMode && !panelCollapsed;
         if (makeInert) {
@@ -551,7 +623,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         } else {
           pswpEl.removeAttribute('aria-hidden');
         }
-        try { (pswpEl as any).inert = makeInert; } catch {}
+  try { pswpEl.inert = makeInert; } catch {}
       } catch {}
     };
 
@@ -567,18 +639,18 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     // Enhance existing setPanelCollapsed to animate in sheet mode
     const originalSetPanelCollapsed = setPanelCollapsed;
     // Redefine function reference so subsequent uses inside helpers get animation
-    // @ts-ignore - reassigning for enhancement
-    setPanelCollapsed = (val: boolean, container?: HTMLElement | null) => {
-      originalSetPanelCollapsed(val, container);
-      applyCollapsedStateAnimated();
-      updateBackgroundInert();
-      announcePanelState();
-      syncSheetFocusTrap();
-    };
+      // Wrapper to add animation + a11y side effects without reassigning const
+      const setPanelCollapsedEnhanced = (val: boolean, container?: HTMLElement | null) => {
+        setPanelCollapsed(val, container);
+        applyCollapsedStateAnimated();
+        updateBackgroundInert();
+        announcePanelState();
+        syncSheetFocusTrap();
+      };
 
     const onSheetPointerDown = (e: PointerEvent | TouchEvent) => {
       if (!panelContainer) return;
-      const { overlayMode } = getLayoutState();
+    const { overlayMode } = getLayoutState();
       if (!overlayMode) return;
       // Only initiate if starting near top (grip area) or collapsed (anywhere)
       const rect = panelContainer.getBoundingClientRect();
@@ -605,9 +677,9 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       pendingDragHeight = null;
       dragRaf = 0;
     };
-    const onSheetPointerMove = (e: any) => {
+    const onSheetPointerMove = (e: PointerEvent | TouchEvent) => {
       if (!isDraggingSheet || !panelContainer) return;
-      const clientY = e.clientY || e.touches?.[0]?.clientY;
+      const clientY = (e as PointerEvent).clientY || (e as TouchEvent).touches?.[0]?.clientY;
       if (!clientY) return;
       const delta = dragStartY - clientY; // drag up => positive
       const target = Math.min(Math.max(dragStartHeight + delta, collapsedHeight), getExpandedHeight());
@@ -618,11 +690,11 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       lastDragY = clientY;
     };
 
-    const onSheetPointerUp = (e: any) => {
+    const onSheetPointerUp = (e: PointerEvent | TouchEvent) => {
       if (!panelContainer) return;
       if (!isDraggingSheet) return;
       isDraggingSheet = false;
-      const clientY = e.clientY || e.changedTouches?.[0]?.clientY || lastDragY;
+      const clientY = (e as PointerEvent).clientY || (e as TouchEvent).changedTouches?.[0]?.clientY || lastDragY;
       const totalDelta = dragStartY - clientY;
       const dt = performance.now() - lastDragTime;
       const velocity = dt ? (dragStartY - lastDragY) / dt : 0; // px per ms (rough)
@@ -642,6 +714,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       announcePanelState();
       syncSheetFocusTrap();
     };
+    // (removed accidental stray calls to enhanced collapse setter)
 
     const attachSheetGestures = () => {
       if (sheetGesturesAttached || !panelContainer) return;
@@ -656,20 +729,27 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       sheetGesturesAttached = false;
       try {
         panelContainer.removeEventListener('pointerdown', onSheetPointerDown);
-        panelContainer.removeEventListener('touchstart', onSheetPointerDown as any);
-        document.removeEventListener('pointermove', onSheetPointerMove);
-        document.removeEventListener('touchmove', onSheetPointerMove as any);
+  panelContainer.removeEventListener('touchstart', onSheetPointerDown as EventListener);
+  document.removeEventListener('pointermove', onSheetPointerMove as EventListener);
+  document.removeEventListener('touchmove', onSheetPointerMove as EventListener);
       } catch {}
     };
 
     const manageSheetGestures = () => {
       const { overlayMode } = getLayoutState();
-      if (overlayMode) attachSheetGestures(); else { detachSheetGestures(); panelContainer && (panelContainer.style.height = 'auto'); }
+      if (overlayMode) {
+        attachSheetGestures();
+      } else {
+        detachSheetGestures();
+        if (panelContainer) {
+          panelContainer.style.height = 'auto';
+        }
+      }
     };
     // initial inert sync (in case opened directly in expanded state logic later toggles)
     updateBackgroundInert();
     syncSheetFocusTrap();
-  try { updateSheetDialogA11y(); } catch {}
+    try { updateSheetDialogA11y(); } catch {}
 
     const applyPanelLayout = (container: HTMLElement | null) => {
       if (!container || !panelContainer) return;
@@ -689,8 +769,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         styleOverlayContentOffsets(container, leftOffset, overlayMode);
         stylePanelForMode(overlayMode);
       } catch {}
-      try { (pswpRef.current as any)?.pswp?.updateSize?.(true); } catch {}
-      ensureCollapseHandle(container, activePanelWidth, overlayMode);
+  try { getPswp(pswpRef)?.updateSize?.(true); } catch {}
+  ensureCollapseHandle(container, activePanelWidth);
       try { manageSheetGestures(); } catch {}
     };
 
@@ -793,8 +873,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         if (w) w.print();
       });
       controls.querySelector('[data-pswp-share]')?.addEventListener('click', async () => {
-        if ((navigator as any).share) {
-          try { await (navigator as any).share({ title: it.title, url: it.src || it.video?.src || '' }); } catch {}
+        if ("share" in navigator && typeof navigator.share === 'function') {
+          try { await navigator.share({ title: it.title, url: it.src || it.video?.src || '' }); } catch {}
         } else {
           try { await navigator.clipboard.writeText(it.src || it.video?.src || ''); } catch {}
           showToast('Image URL copied to clipboard');
@@ -807,8 +887,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     const onThumbClick = (ev: Event) => {
       const target = ev.currentTarget as HTMLElement;
       const idxStr = target.getAttribute('data-pswp-go');
-      const idx = idxStr ? parseInt(idxStr, 10) : NaN;
-      if (!isNaN(idx)) { try { (pswpRef.current as any)?.pswp?.goTo?.(idx); } catch {} }
+    const idx = idxStr ? parseInt(idxStr, 10) : NaN;
+  if (!isNaN(idx)) { try { getPswp(pswpRef)?.goTo?.(idx); } catch {} }
     };
     const wireThumbnails = () => {
       try { panelContainer?.querySelectorAll('[data-pswp-go]').forEach(btn => btn.addEventListener('click', onThumbClick)); } catch {}
@@ -816,10 +896,9 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
     const createOverlay = (itemIndex: number, container: HTMLElement | null, reuse = false) => {
       const it = items[itemIndex];
-  try { (window as any).__photoSwipeCurrentItem = it; (window as any).__photoSwipeCurrentIndex = itemIndex; } catch {}
-  try { (window as any).__photoSwipeTotal = items.length; } catch {}
-  // expose full items list globally for thumbnail strip usage
-  try { (window as any).__photoSwipeItems = items; } catch {}
+  try { window.__photoSwipeCurrentItem = it; window.__photoSwipeCurrentIndex = itemIndex; } catch {}
+  try { window.__photoSwipeTotal = items.length; } catch {}
+  try { window.__photoSwipeItems = items; } catch {}
   dispatchSlideChange({ item: it, index: itemIndex, total: items.length, items });
       const creating = !reuse || !overlayEl;
       if (creating) {
@@ -902,9 +981,9 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       if (resizeTimer) window.clearTimeout(resizeTimer);
       resizeTimer = window.setTimeout(() => {
         try {
-          const container = (pswpRef.current as any)?.pswp?.el || null;
+          const container = getPswp(pswpRef)?.el || null;
           applyPanelLayout(container);
-          try { (pswpRef.current as any)?.pswp?.updateSize?.(true); } catch {}
+          try { getPswp(pswpRef)?.updateSize?.(true); } catch {}
           try { manageSheetGestures(); } catch {}
           updateBackgroundInert();
           clampExpandedHeight();
@@ -920,13 +999,14 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       }, 120);
     };
     window.addEventListener('resize', onResize);
-    try { (window as any).forceCreatePswpCollapseHandle = () => { try { applyPanelLayout((pswpRef.current as any)?.pswp?.el || null); } catch {}; }; } catch {}
+  try { window.forceCreatePswpCollapseHandle = () => { try { applyPanelLayout(getPswp(pswpRef)?.el || null); } catch {}; }; } catch {}
 
-    (lightbox as any).on('open', (e: any) => {
+  lightbox.on('open', (...args: unknown[]) => {
+      const e = (args[0] as CustomEvent | undefined) || ({} as CustomEvent);
       try {
         // signal other UI (flip-cards) that photoswipe is open
-        try { (window as any).__photoSwipeOpen = true; } catch {}
-        const container = (pswpRef.current as any)?.pswp?.el || null;
+  try { window.__photoSwipeOpen = true; } catch {}
+  const container = getPswp(pswpRef)?.el || null;
         const startIndex = e?.detail?.index ?? index;
         // mount panel BEFORE creating overlay so initial slide-change event is received by React panel
         if (leftPanel) {
@@ -953,11 +1033,12 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       } catch {}
     });
 
-    let layoutApplied = false; // track first layout
+  // removed unused: layoutApplied (legacy from earlier layout logic)
 
-    (lightbox as any).on('change', (e: any) => {
+  lightbox.on('change', (...args: unknown[]) => {
+      const e = (args[0] as CustomEvent | undefined) || ({} as CustomEvent);
       try {
-        const pswpInstance = (pswpRef.current as any)?.pswp;
+  const pswpInstance = getPswp(pswpRef);
         const container = pswpInstance?.el || null;
         try { lastVideoEl?.pause(); } catch {}
         const currentIndex = typeof pswpInstance?.currIndex === 'number' ? pswpInstance.currIndex : (e?.detail?.index ?? 0);
@@ -997,15 +1078,15 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
     // removed beforeChange artificial dispatch to avoid double updates
 
-    (lightbox as any).on('close', () => {
-      try { (window as any).__photoSwipeOpen = false; (window as any).__photoSwipeCurrentItem = null; (window as any).__photoSwipeCurrentIndex = null; } catch {}
+  lightbox.on('close', () => {
+  try { window.__photoSwipeOpen = false; window.__photoSwipeCurrentItem = null; window.__photoSwipeCurrentIndex = null; } catch {}
       dispatchSlideChange({ item: null, index: null });
       restoreContainerStyles();
   if (overlayEl) { overlayEl.remove(); overlayEl = null; }
   // progress bar removed
       // defer unmount to avoid synchronous root unmount during render
   setTimeout(() => unmountPanel(), 0);
-      try { (window as any).__photoSwipeInstance = (pswpRef.current as any)?.pswp || (pswpRef.current as any); } catch {}
+  try { window.__photoSwipeInstance = getPswp(pswpRef) || getLightbox(pswpRef); } catch {}
       onClose?.();
       try { hideHelp(); } catch {}
     });
@@ -1017,11 +1098,11 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     const removeGlobalListeners = () => {
       document.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', onResize);
-      const flipListener = (lightbox as any)._pswpFlipListener;
+  const flipListener = (lightbox as unknown as Record<string, unknown>)._pswpFlipListener as EventListener | undefined;
       if (flipListener) document.removeEventListener('click', flipListener);
     };
     const teardownGestures = () => { try { detachSheetGestures(); } catch {} };
-    const destroyInstance = () => { try { (pswpRef.current as any)?.destroy?.(); } catch {} };
+  const destroyInstance = () => { try { getLightbox(pswpRef)?.destroy?.(); } catch {} };
     const disconnectObservers = () => { try { collapseHandleObserver?.disconnect(); } catch {} };
     const removeCollapseHandle = () => {
       if (collapseHandle) {
@@ -1031,17 +1112,17 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     };
     const clearInert = () => {
       try {
-        const pswpEl = (pswpRef.current as any)?.pswp?.el as HTMLElement | undefined;
+  const pswpEl = getPswp(pswpRef)?.el as HTMLElement | undefined;
         if (pswpEl) {
           pswpEl.removeAttribute('aria-hidden');
-          try { (pswpEl as any).inert = false; } catch {}
+          try { pswpEl.inert = false; } catch {}
         }
       } catch {}
     };
     const removeFocusTrap = () => {
       try {
         if (sheetKeydownListener && panelContainer) {
-          panelContainer.removeEventListener('keydown', sheetKeydownListener as any);
+          panelContainer.removeEventListener('keydown', sheetKeydownListener as EventListener);
         }
       } catch {}
     };
@@ -1057,11 +1138,13 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       removeFocusTrap();
     };
     return cleanupEffect;
-  }, [items, index, open, onClose]);
+    // onClose deliberately excluded: close handling is wired via PhotoSwipe events
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, index, open]);
 
-  function toggleHelp() { (window as any).__pswpHelpVisible ? hideHelp() : showHelp(); }
+  function toggleHelp() { if (window.__pswpHelpVisible) { hideHelp(); } else { showHelp(); } }
   function showHelp() {
-    if ((window as any).__pswpHelpVisible) return;
+    if (window.__pswpHelpVisible) return;
     const help = document.createElement('div');
     help.id = 'pswp-help';
     help.role = 'dialog';
@@ -1077,26 +1160,15 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         <li><strong>?</strong> Toggle Help</li>
       </ul>`;
     document.body.appendChild(help);
-    (window as any).__pswpHelpVisible = true;
+    window.__pswpHelpVisible = true;
   }
   function hideHelp() {
     const el = document.getElementById('pswp-help');
     if (el) el.remove();
-    (window as any).__pswpHelpVisible = false;
+    window.__pswpHelpVisible = false;
   }
 
-    // Throttled live announcement for slide changes
-    let _announceLast = 0;
-  function announceSlide(idx: number) {
-      const now = Date.now();
-      if (now - _announceLast < 300) return; // throttle 300ms to prevent SR spam
-      _announceLast = now;
-      if (!liveRegionRef.current) return;
-      try {
-        const item = items[idx];
-        liveRegionRef.current.textContent = `Slide ${idx + 1} of ${items.length}${item?.title ? ': ' + item.title : ''}`;
-      } catch {}
-  }
+    // Removed unused announceSlide helper (previously throttled live region updates)
 
   return <section ref={placeholderRef} aria-label="Lightbox gallery" style={{ display: 'block' }} />;
   // NOTE: replaced by semantic section would be better; kept div for minimal change.

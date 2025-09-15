@@ -21,7 +21,7 @@ const AboutSection = () => {
               </h2>
               <div className="space-y-6 text-muted-foreground max-w-md">
                 <p>
-                  My approach to photography is to make your moments last a lifetime. I build a collaborative relationship to create the images you've always envisioned.
+                  My approach to photography is to make your moments last a lifetime. I build a collaborative relationship to create the images you&apos;ve always envisioned.
                 </p>
                 <p>
                   I am a dedicated photographer who believes in the power of a single frame. I create images that are not only beautiful but also authentic and emotional.
