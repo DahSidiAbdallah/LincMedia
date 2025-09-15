@@ -125,29 +125,22 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     // Wire keyboard shortcuts for accessibility and navigation
     const onKey = (e: KeyboardEvent) => {
       if (!pswpRef.current) return;
-      // @ts-ignore - PhotoSwipe instance API
-      const api = pswpRef.current.pswp ? pswpRef.current.pswp : null;
-      if (e.key === 'Escape') {
-        onClose?.();
-      } else if (e.key === 'ArrowLeft') {
-        try { api?.prev?.(); } catch {}
-      } else if (e.key === 'ArrowRight') {
-        try { api?.next?.(); } catch {}
-      } else if (e.key.toLowerCase() === 'i' || e.key.toLowerCase() === 'f') {
-        try { window.dispatchEvent(new CustomEvent('pswp-toggle-info')); } catch {}
-      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
-        try { toggleHelp(); } catch {}
-      } else if (e.key.toLowerCase() === 'c') {
+      // Let PhotoSwipe handle Arrow keys natively to avoid skipping slides.
+      if (e.key === 'Escape') onClose?.();
+      else if (e.key === '?' || (e.shiftKey && e.key === '/')) { try { toggleHelp(); } catch {} }
+      else if (e.key.toLowerCase() === 'i' || e.key.toLowerCase() === 'f') { try { window.dispatchEvent(new CustomEvent('pswp-toggle-info')); } catch {} }
+      else if (e.key.toLowerCase() === 'c') {
         try {
-          const cat = (window as any).__photoSwipeCategory;
-          const all: any[] = (window as any).__photoSwipeItems || [];
-          const current = (window as any).__photoSwipeCurrentIndex || 0;
-          if (cat && all.length > 1) {
-            for (let off = 1; off < all.length; off++) {
-              const ni = (current + off) % all.length;
-              if (all[ni]?.category === cat) { api?.goTo?.(ni); break; }
+          const api = (pswpRef.current as any)?.pswp;
+            const cat = (window as any).__photoSwipeCategory;
+            const all: any[] = (window as any).__photoSwipeItems || [];
+            const current = (window as any).__photoSwipeCurrentIndex || 0;
+            if (cat && all.length > 1) {
+              for (let off = 1; off < all.length; off++) {
+                const ni = (current + off) % all.length;
+                if (all[ni]?.category === cat) { api?.goTo?.(ni); break; }
+              }
             }
-          }
         } catch {}
       }
     };
@@ -159,7 +152,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   let overlayEl: HTMLDivElement | null = null;
   let panelRoot: ReactDOM.Root | null = null;
   let panelContainer: HTMLDivElement | null = null;
-  let rightThumbStrip: HTMLDivElement | null = null;
+  // removed: right thumbnail strip
   // track the last elements we mutated and their previous inline styles so we can restore them
   let lastContainer: HTMLElement | null = null;
   let lastZoomWrap: HTMLElement | null = null;
@@ -196,27 +189,44 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     const applyPanelLayout = (container: HTMLElement | null) => {
       if (!container || !panelContainer) return;
       const shouldHidePanel = window.innerWidth < hidePanelBelow;
-      panelContainer.style.display = shouldHidePanel ? 'none' : 'flex';
       const panelWidth = computePanelWidth();
+      panelContainer.style.display = shouldHidePanel ? 'none' : 'flex';
       panelContainer.style.width = panelWidth + 'px';
-      if (!prevContainerStyles.paddingLeft) {
-        prevContainerStyles.paddingLeft = container.style.paddingLeft || null;
-      }
-      // Shift only if not hidden
-      container.style.paddingLeft = shouldHidePanel ? '0px' : panelWidth + 'px';
-      // compensate for right thumbnail strip if present
-      const rightStrip = document.querySelector('.pswp-right-thumbs') as HTMLElement | null;
-      const rightW = rightStrip ? rightStrip.getBoundingClientRect().width + 16 : 0; // include margin breathing room
-      container.style.paddingRight = rightW ? rightW + 'px' : '0px';
-      try { container.style.setProperty('--pswp-right-strip-width', rightW + 'px'); } catch {}
-      // expose a CSS var so global styles can position default controls (e.g., prev arrow)
-      try { (container as HTMLElement).style.setProperty('--pswp-left-panel-width', panelWidth + 'px'); } catch {}
-      // additionally nudge the inner scroll wrap to ensure stage starts after panel (defensive for theme styles)
+      const gutter = shouldHidePanel ? 0 : 32;
+      // record previous paddingLeft once (legacy cleanup compatibility)
+      if (!prevContainerStyles.paddingLeft) prevContainerStyles.paddingLeft = container.style.paddingLeft || null;
+      // remove padding approach; rely on shifting scroll-wrap for precision
+      container.style.paddingLeft = '0px';
+      container.style.paddingRight = '0px';
+      try { (container as HTMLElement).style.zIndex = '2147483600'; } catch {}
+      try {
+        (container as HTMLElement).style.setProperty('--pswp-left-panel-width', shouldHidePanel ? '0px' : panelWidth + 'px');
+        (container as HTMLElement).style.setProperty('--pswp-left-panel-gutter', gutter + 'px');
+      } catch {}
       try {
         const scrollWrap = container.querySelector('.pswp__scroll-wrap') as HTMLElement | null;
-        if (scrollWrap) scrollWrap.style.marginLeft = '0';
+        if (scrollWrap) {
+          scrollWrap.style.position = 'relative';
+          scrollWrap.style.left = shouldHidePanel ? '0px' : (panelWidth + gutter) + 'px';
+          scrollWrap.style.width = shouldHidePanel ? '100%' : `calc(100% - ${panelWidth + gutter}px)`;
+          scrollWrap.style.marginLeft = '0';
+        }
+        const bg = container.querySelector('.pswp__bg') as HTMLElement | null;
+        if (bg) {
+          bg.style.left = shouldHidePanel ? '0px' : (panelWidth + gutter) + 'px';
+          bg.style.width = shouldHidePanel ? '100%' : `calc(100% - ${panelWidth + gutter}px)`;
+        }
+        const ui = container.querySelector('.pswp__ui') as HTMLElement | null;
+        if (ui) {
+          ui.style.left = shouldHidePanel ? '0px' : (panelWidth + gutter) + 'px';
+          ui.style.width = shouldHidePanel ? '100%' : `calc(100% - ${panelWidth + gutter}px)`;
+        }
         const containerEl = container.querySelector('.pswp__container') as HTMLElement | null;
-        if (containerEl) containerEl.style.marginLeft = '0';
+        if (containerEl) {
+          containerEl.style.marginLeft = '0';
+          containerEl.style.maxWidth = '100%';
+          containerEl.style.zIndex = '2147483610';
+        }
       } catch {}
       try { (pswpRef.current as any)?.pswp?.updateSize?.(true); } catch {}
     };
@@ -236,7 +246,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     overlayEl.className = 'pswp-extra-overlay flex items-start justify-start';
     overlayEl.style.position = 'fixed';
     overlayEl.style.inset = '0';
-  overlayEl.style.zIndex = '2147483000';
+  overlayEl.style.zIndex = '2147483620'; // above pswp root container & arrows
     overlayEl.style.pointerEvents = 'none';
 
     const controls = document.createElement('div');
@@ -282,9 +292,16 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       }
       // If a React leftPanel isn't provided, render a simple HTML fallback into the panel container
       if (!leftPanel && panelContainer) {
+        // Build thumbnail navigation + metadata
+        const thumbs = items.map((itm, idx) => {
+          const active = idx === itemIndex ? 'outline:2px solid #fff;' : '';
+          return `<button data-pswp-go="${idx}" style="background:#111;border:0;padding:0;margin:0;cursor:pointer;${active}display:inline-block;width:62px;height:48px;overflow:hidden;border-radius:4px;"><img src="${itm.src || itm.video?.src || ''}" alt="thumb ${idx+1}" style="width:100%;height:100%;object-fit:cover;display:block;" /></button>`;
+        }).join('');
         panelContainer.innerHTML = `
-          <div class="font-semibold">${it.title || ''}</div>
-          <div class="text-sm mt-2">${short}${more ? '...' : ''}</div>
+          <div class="text-[11px] tracking-wide mb-2 opacity-70">SLIDE ${itemIndex + 1} / ${items.length}</div>
+          <div class="pswp-thumb-bar flex flex-wrap gap-2 mb-4">${thumbs}</div>
+          <div class="font-semibold line-clamp-2">${it.title || ''}</div>
+          <div class="text-sm mt-2 leading-snug">${short}${more ? '...' : ''}</div>
           ${more ? '<button data-pswp-readmore class="mt-2 underline text-sm">Read more</button>' : ''}
           ${exifHtml}
         `;
@@ -294,48 +311,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   // if a leftPanel React node is provided, we'll render it into the panelContainer
   if (!reuse || !overlayEl.parentElement) {
     overlayEl.appendChild(panelContainer);
-    if (!rightThumbStrip) {
-      rightThumbStrip = document.createElement('div');
-      rightThumbStrip.className = 'pswp-right-thumbs';
-      Object.assign(rightThumbStrip.style, {
-        position: 'fixed', top: '56px', right: '8px', width: '260px', maxHeight: '190px',
-        overflowY: 'auto', zIndex: '2147483600', display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill,minmax(48px,1fr))', gap: '4px',
-        padding: '6px 6px 8px', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)',
-        borderRadius: '6px'
-      } as CSSStyleDeclaration);
-      rightThumbStrip.setAttribute('aria-label','Slide thumbnails');
-      const buildThumbs = () => {
-        rightThumbStrip!.innerHTML = '';
-        items.forEach((thumbIt, ti) => {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-            btn.style.position='relative'; btn.style.padding='0'; btn.style.border='1px solid transparent';
-            btn.style.aspectRatio='1/1'; btn.style.overflow='hidden'; btn.style.borderRadius='4px'; btn.style.cursor='pointer'; btn.style.background='#111';
-          btn.dataset.index = ti.toString();
-          btn.setAttribute('aria-label', `Go to slide ${ti+1}`);
-          const img = document.createElement('img');
-          img.src = thumbIt.video?.poster || thumbIt.src || '';
-          img.alt = thumbIt.title || '';
-          Object.assign(img.style, { width: '100%', height: '100%', objectFit: 'cover', opacity: '.75', transition: 'opacity 140ms' });
-          btn.appendChild(img);
-          btn.addEventListener('click', () => {
-            try { const api = (window as any)?.__photoSwipeInstance; if (api?.goTo) api.goTo(ti); } catch {}
-          });
-          btn.addEventListener('mouseenter', () => { img.style.opacity='1'; });
-          btn.addEventListener('mouseleave', () => { if (!btn.classList.contains('active')) img.style.opacity='.75'; });
-          rightThumbStrip!.appendChild(btn);
-        });
-      };
-      buildThumbs();
-      document.body.appendChild(rightThumbStrip);
-      const syncActive = (idx: number) => {
-        if (!rightThumbStrip) return; const children = Array.from(rightThumbStrip.querySelectorAll('button')) as HTMLButtonElement[];
-        children.forEach((c,i)=>{ c.classList.toggle('active', i===idx); c.style.borderColor = i===idx ? 'white' : 'transparent'; const img=c.querySelector('img') as HTMLImageElement|null; if(img) img.style.opacity = i===idx ? '1' : '.55'; });
-        const active = children[idx]; if(active){ const r=active.getBoundingClientRect(); const pr=rightThumbStrip.getBoundingClientRect(); if(r.top<pr.top||r.bottom>pr.bottom){ rightThumbStrip.scrollTo({ top: active.offsetTop-20, behavior:'smooth' }); }}
-      };
-      window.addEventListener('pswp-slide-change', (ev: any) => { const ci = typeof ev.detail?.index === 'number' ? ev.detail.index : 0; syncActive(ci); });
-    }
+    // right thumbnail strip removed
     // controls live inside a sticky footer in the panel
     const footer = document.createElement('div');
     footer.className = 'pswp-panel-footer';
@@ -355,7 +331,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     document.body.appendChild(overlayEl);
   }
 
-  // wire actions
+      // wire actions & thumbnail navigation
       controls.querySelector('[data-pswp-download]')?.addEventListener('click', () => {
         const a = document.createElement('a');
         a.href = it.src || it.video?.src || '';
@@ -380,6 +356,20 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       controls.querySelector('[data-pswp-meta]')?.addEventListener('click', () => {
         try { window.dispatchEvent(new CustomEvent('pswp-toggle-info')); } catch {}
       });
+
+      // Thumbnail click navigation
+      try {
+        panelContainer?.querySelectorAll('[data-pswp-go]').forEach(btn => {
+          btn.addEventListener('click', (ev) => {
+            const target = ev.currentTarget as HTMLElement;
+            const idxStr = target.getAttribute('data-pswp-go');
+            const idx = idxStr ? parseInt(idxStr, 10) : NaN;
+            if (!isNaN(idx)) {
+              try { (pswpRef.current as any)?.pswp?.goTo?.(idx); } catch {}
+            }
+          });
+        });
+      } catch {}
 
       // read more
   // (read-more will be handled by the React panel if provided)
@@ -495,16 +485,24 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
     (lightbox as any).on('change', (e: any) => {
       try {
-        const container = (pswpRef.current as any)?.pswp?.el || null;
-        // reuse existing overlay/panel; just update global state + event
+        const pswpInstance = (pswpRef.current as any)?.pswp;
+        const container = pswpInstance?.el || null;
         // pause any previous video
         try { lastVideoEl?.pause(); } catch {}
-        createOverlay(e?.detail?.index ?? 0, container, true);
-  // progress bar removed
+        const currentIndex = typeof pswpInstance?.currIndex === 'number' ? pswpInstance.currIndex : (e?.detail?.index ?? 0);
+        createOverlay(currentIndex, container, true);
         if (leftPanel && panelContainer && !panelRoot) {
-          // if React panel not mounted yet, mount it once
           mountPanel(leftPanel);
         }
+        if (container) applyPanelLayout(container);
+        // re-dispatch slide-change explicitly to guarantee React panel sync
+        try {
+          const idx = currentIndex;
+          const it = items[idx];
+          if (it) {
+            window.dispatchEvent(new CustomEvent('pswp-slide-change', { detail: { item: it, index: idx, total: items.length, items } }));
+          }
+        } catch {}
         // fade-in current media
         try {
           const current = container?.querySelector('.pswp__item:not(.pswp__item--hidden) *:is(img,video)') as HTMLElement | null;
@@ -515,16 +513,16 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
             if (current.tagName === 'VIDEO') lastVideoEl = current as HTMLVideoElement;
           }
         } catch {}
-        // React left panel will re-read global state / custom event
       } catch {}
     });
+
+    // removed beforeChange artificial dispatch to avoid double updates
 
     (lightbox as any).on('close', () => {
       try { (window as any).__photoSwipeOpen = false; (window as any).__photoSwipeCurrentItem = null; (window as any).__photoSwipeCurrentIndex = null; } catch {}
       dispatchSlideChange({ item: null, index: null });
       restoreContainerStyles();
   if (overlayEl) { overlayEl.remove(); overlayEl = null; }
-  if (rightThumbStrip) { try { rightThumbStrip.remove(); } catch {}; rightThumbStrip = null; }
   // progress bar removed
       // defer unmount to avoid synchronous root unmount during render
       requestAnimationFrame(() => setTimeout(() => unmountPanel(), 0));
@@ -542,7 +540,6 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       // ensure we restore any container styles when cleaning up
       try { restoreContainerStyles(); } catch {}
   if (overlayEl) overlayEl.remove();
-  if (rightThumbStrip) { try { rightThumbStrip.remove(); } catch {}; rightThumbStrip = null; }
   // progress bar removed
   window.removeEventListener('resize', onResize);
       lightbox.destroy();

@@ -79,7 +79,7 @@ export default function GalleriesPage() {
             </div>
           )}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 filter-anim-container">
+  <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 filter-anim-container">
           {filteredImages.map((img, i) => (
             <GalleryThumb
               key={img.src + i}
@@ -112,8 +112,8 @@ const GalleryThumb: React.FC<ThumbProps> = ({ img, index, onOpen }) => {
   return (
     <button
       onClick={() => onOpen(index)}
-      className="group relative overflow-hidden rounded-md focus:outline-none focus:ring-2 focus:ring-foreground"
-      style={{ aspectRatio: '4/3' }}
+      className="group relative overflow-hidden rounded-lg focus:outline-none focus:ring-2 focus:ring-foreground shadow-sm hover:shadow-md transition-shadow"
+      style={{ aspectRatio: '3/2' }}
       aria-label={`Open ${img.gallery} image ${img.title}`}
     >
       <div className={`absolute inset-0 transition-opacity duration-500 ${loaded ? 'opacity-0' : 'opacity-100'} bg-muted animate-pulse`} />
@@ -121,10 +121,10 @@ const GalleryThumb: React.FC<ThumbProps> = ({ img, index, onOpen }) => {
         src={img.src}
         alt={img.title}
         fill={false as any}
-        width={600}
-        height={450}
-        sizes="(max-width:640px) 50vw, (max-width:1024px) 25vw, 15vw"
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+        width={750}
+        height={500}
+        sizes="(max-width:640px) 70vw, (max-width:1024px) 33vw, (max-width:1536px) 20vw, 15vw"
+        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.08]"
         onLoadingComplete={() => setLoaded(true)}
         loading="lazy"
       />
