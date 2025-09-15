@@ -2,13 +2,18 @@
   "name": "nextn",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18.18.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
-  "dev": "next dev --turbopack -p ${PORT:-9002}",
-  "dev:free": "next dev --turbopack",
+    "dev": "next dev --turbopack -p ${PORT:-9002}",
+    "dev:free": "next dev --turbopack",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
-  "generate-image-manifest": "node ./scripts/generate-image-manifest.js",
-  "build": "npm run generate-image-manifest && next build",
+    "generate-image-manifest": "node ./scripts/generate-image-manifest.js",
+    "build": "npm run generate-image-manifest && next build",
+    "prestart": "node -e \"try{require.resolve('next/package.json');console.log('Next.js OK')}catch(e){console.error('ERROR: next not installed');process.exit(1)}\"",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"

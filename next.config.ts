@@ -1,7 +1,11 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  /* Deployment optimizations */
+  output: 'standalone',
+  experimental: {
+    // Ensure server components / turbopack features as needed (safe defaults)
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
