@@ -47,29 +47,30 @@ const StatsSection = () => {
                 </div>
             </AnimatedWrapper>
             <AnimatedWrapper delay="200ms">
-                <div>
-                  <h2 className="text-2xl font-semibold mb-6">My approach to photography is designed to make your journey from concept to final print as smooth and enjoyable as possible.</h2>
-                  <div className="space-y-6 text-muted-foreground">
-                    <p>
-                        With a clear, collaborative process, I prioritize your unique vision. At every step, I'll keep you informed, inspired, and involved in bringing your story to life.
-                    </p>
-                  </div>
-                  <div>
-                    <Button variant="outline" className="mt-8" onClick={() => setOpen(true)}>My Process</Button>
-                    <BookModal open={open} onClose={() => setOpen(false)}>
-                      <h2 className="text-3xl font-bold mb-2">My Process</h2>
-                      <p className="mb-4 text-muted-foreground">How I work with clients</p>
-                      <ul className="list-disc pl-6 mb-4">
-                        <li>Consultation & Vision</li>
-                        <li>Planning & Preparation</li>
-                        <li>Shooting Day</li>
-                        <li>Editing & Delivery</li>
-                      </ul>
-                      <p>Here you can describe your process in detail, so clients know what to expect. (Replace with real content.)</p>
-                    </BookModal>
-                  </div>
+              <div>
+                <h2 className="text-2xl font-semibold mb-6">My approach to photography is designed to make your journey from concept to final print as smooth and enjoyable as possible.</h2>
+                <div className="space-y-6 text-muted-foreground">
+                  <p>
+                    With a clear, collaborative process, I prioritize your unique vision. At every step, I&apos;ll keep you informed, inspired, and involved in bringing your story to life.
+                  </p>
+                  <p>
+                    Our platform&apos;s core is built on a foundation of smart automation.
+                  </p>
                 </div>
-          </AnimatedWrapper>
+                <Button variant="outline" className="mt-8" onClick={() => setOpen(true)}>My Process</Button>
+                <BookModal open={open} onClose={() => setOpen(false)}>
+                  <p>Discover how our platform&apos;s capabilities empower businesses to scale faster.</p>
+                  <p className="mb-4 text-muted-foreground">How I work with clients</p>
+                  <ul className="list-disc pl-6 mb-4">
+                    <li>Consultation & Vision</li>
+                    <li>Planning & Preparation</li>
+                    <li>Shooting Day</li>
+                    <li>Editing & Delivery</li>
+                  </ul>
+                  <p>Here you can describe your process in detail, so clients know what to expect. (Replace with real content.)</p>
+                </BookModal>
+              </div>
+            </AnimatedWrapper>
         </div>
       </div>
     </section>

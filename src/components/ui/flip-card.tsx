@@ -3,6 +3,11 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
+// Global window augmentation for overlay tracking (shared with other components)
+declare global {
+  interface Window { __flipOpenCount?: number; __photoSwipeOpen?: boolean }
+}
+
 type FlipCardProps = {
   isFlipped?: boolean;
   onToggle?: () => void;
@@ -16,12 +21,12 @@ type FlipCardProps = {
 
 const FlipCard: React.FC<FlipCardProps> = ({ isFlipped = false, onToggle, frontClassName, backClassName, children, className, disableOverlay = false, as }) => {
   const childrenArr = React.Children.toArray(children);
-  const front = childrenArr[0] ?? null;
-  const back = childrenArr[1] ?? null;
+  const front = childrenArr[0] as React.ReactNode | null;
+  const back = childrenArr[1] as React.ReactNode | null;
 
   const interactive = typeof onToggle === 'function';
   // Never render a native button to avoid nested button hydration errors; emulate button semantics.
-  const Wrapper: any = as || 'div';
+  const Wrapper: React.ElementType = as || 'div';
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const frontRef = useRef<HTMLDivElement | null>(null);
@@ -30,7 +35,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ isFlipped = false, onToggle, frontC
   useEffect(() => {
     const measure = () => {
       if (frontRef.current) {
-        let h = frontRef.current.getBoundingClientRect().height;
+  const h = frontRef.current.getBoundingClientRect().height;
         // ignore bogus zero measurements (images may not be loaded yet)
         if (!h || h < 8) {
           // schedule a short re-measure after images have a chance to load
@@ -68,9 +73,9 @@ const FlipCard: React.FC<FlipCardProps> = ({ isFlipped = false, onToggle, frontC
     if (typeof window === 'undefined') return;
     if (disableOverlay) return; // overlay disabled for this instance
     // if PhotoSwipe is open, avoid creating a second overlay that could obscure controls
-    if ((window as any).__photoSwipeOpen) return;
-
-    (window as any).__flipOpenCount = (window as any).__flipOpenCount || 0;
+  const w = window;
+  if (w.__photoSwipeOpen) return;
+  w.__flipOpenCount = w.__flipOpenCount || 0;
 
     const createOverlay = () => {
       const overlay = document.createElement('div');
@@ -89,8 +94,8 @@ const FlipCard: React.FC<FlipCardProps> = ({ isFlipped = false, onToggle, frontC
     let overlayEl: HTMLDivElement | null = null;
 
     if (isFlipped) {
-      (window as any).__flipOpenCount += 1;
-      if ((window as any).__flipOpenCount === 1) {
+  w.__flipOpenCount += 1;
+  if (w.__flipOpenCount === 1) {
         overlayEl = createOverlay();
         // clicking overlay closes this card
         overlayEl.addEventListener('click', () => {
@@ -99,10 +104,10 @@ const FlipCard: React.FC<FlipCardProps> = ({ isFlipped = false, onToggle, frontC
         document.body.appendChild(overlayEl);
       }
     } else {
-      if ((window as any).__flipOpenCount > 0) {
-        (window as any).__flipOpenCount -= 1;
+      if ((w.__flipOpenCount ?? 0) > 0) {
+        w.__flipOpenCount = (w.__flipOpenCount || 0) - 1;
       }
-      if ((window as any).__flipOpenCount === 0) {
+      if (w.__flipOpenCount === 0) {
         const existing = document.querySelector('.flip-overlay');
         existing?.parentElement?.removeChild(existing);
       }
@@ -111,11 +116,11 @@ const FlipCard: React.FC<FlipCardProps> = ({ isFlipped = false, onToggle, frontC
     return () => {
       // cleanup if component unmounts while overlay present
       if (isFlipped) {
-        if ((window as any).__flipOpenCount > 0) {
-          (window as any).__flipOpenCount -= 1;
+        if ((w.__flipOpenCount ?? 0) > 0) {
+          w.__flipOpenCount = (w.__flipOpenCount || 0) - 1;
         }
       }
-      if ((window as any).__flipOpenCount === 0) {
+      if ((w.__flipOpenCount ?? 0) === 0) {
         const existing = document.querySelector('.flip-overlay');
         existing?.parentElement?.removeChild(existing);
       }
@@ -149,6 +154,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ isFlipped = false, onToggle, frontC
         <div
           ref={frontRef}
           className={cn('w-full h-full', frontClassName)}
+          aria-hidden={isFlipped}
           style={{
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
@@ -160,6 +166,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ isFlipped = false, onToggle, frontC
 
         <div
           className={cn('w-full h-full absolute inset-0 overflow-auto', backClassName)}
+          aria-hidden={!isFlipped}
           style={{
             transform: 'rotateY(180deg)',
             backfaceVisibility: 'hidden',

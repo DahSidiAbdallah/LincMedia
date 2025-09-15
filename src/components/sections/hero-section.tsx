@@ -1,6 +1,5 @@
 "use client";
 import AnimatedWrapper from '@/components/ui/animated-wrapper';
-import Image from 'next/image';
 
 const HeroSection = () => {
   return (

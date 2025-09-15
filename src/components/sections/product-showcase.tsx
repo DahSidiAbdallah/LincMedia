@@ -5,7 +5,7 @@ import AnimatedWrapper from '@/components/ui/animated-wrapper';
 import Breadcrumb from '@/components/ui/breadcrumb';
 import { Button } from '../ui/button';
 import FlipCard from '@/components/ui/flip-card';
-import GalleryLightbox from '@/components/ui/gallery-lightbox';
+import GalleryLightbox, { GalleryLightboxItem, ExifData } from '@/components/ui/gallery-lightbox';
 import { galleries } from '@/data/galleries';
 
 
@@ -14,34 +14,43 @@ import { getDominantColorFromUrl, rgbaFromRgb } from '@/lib/utils';
 import { useSearchParams } from 'next/navigation';
 
 // Left panel component (moved outside to satisfy lint rule)
+interface LightboxVideoMeta { src: string; poster?: string; type?: string }
+interface LightboxItem { src?: string; title?: string; caption?: string; video?: LightboxVideoMeta; exif?: Record<string, unknown> | null }
+interface SlideChangeDetail { item: LightboxItem | null; index: number | null; total?: number; items?: LightboxItem[] }
+
 const PhotoLeftPanel: React.FC = () => {
-  const [item, setItem] = useState<any>(null);
+  const [item, setItem] = useState<LightboxItem | null>(null);
   const [idx, setIdx] = useState<number | null>(null);
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
   const [total, setTotal] = useState<number>(0);
   const [fadeKey, setFadeKey] = useState<string>('');
+  const [itemsState, setItemsState] = useState<LightboxItem[]>([]);
 
   useEffect(() => {
-    const handler = (e: any) => {
-      const newItem = e.detail?.item || null;
-      const newIdx = typeof e.detail?.index === 'number' ? e.detail.index : null;
-      const newTotal = typeof e.detail?.total === 'number' ? e.detail.total : 0;
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<SlideChangeDetail>;
+      const newItem = ce.detail?.item || null;
+      const newIdx = typeof ce.detail?.index === 'number' ? ce.detail.index : null;
+      const newTotal = typeof ce.detail?.total === 'number' ? ce.detail.total : 0;
       setTotal(newTotal);
       setFadeKey(`${newIdx}-${newItem?.src || newItem?.video?.src || 'none'}`);
-  setItem(newItem);
-  setIdx(newIdx);
-  // always reset to front when slide changes
-  setIsFlipped(false);
+      setItem(newItem);
+      setIdx(newIdx);
+      // always reset to front when slide changes
+      setIsFlipped(false);
+      if (Array.isArray(ce.detail?.items)) setItemsState(ce.detail.items);
     };
     window.addEventListener('pswp-slide-change', handler);
     try {
-      const gItem = (window as any).__photoSwipeCurrentItem || null;
-      const gIdx = (window as any).__photoSwipeCurrentIndex ?? null;
-      const gTotal = (window as any).__photoSwipeTotal ?? 0;
+  const gItem = (window as Window & { __photoSwipeCurrentItem?: LightboxItem | null }).__photoSwipeCurrentItem ?? null;
+      const gIdx = (window as Window & { __photoSwipeCurrentIndex?: number | null }).__photoSwipeCurrentIndex ?? null;
+      const gTotal = (window as Window & { __photoSwipeTotal?: number }).__photoSwipeTotal ?? 0;
       setItem(gItem);
       setIdx(gIdx);
       setTotal(gTotal);
       setFadeKey(`${gIdx}-${gItem?.src || gItem?.video?.src || 'none'}`);
+  const initItems = (window as Window & { __photoSwipeItems?: LightboxItem[] }).__photoSwipeItems ?? [];
+      setItemsState(initItems);
     } catch {}
     return () => window.removeEventListener('pswp-slide-change', handler);
   }, []);
@@ -49,14 +58,14 @@ const PhotoLeftPanel: React.FC = () => {
   // Allow the global "Info" control inside the panel to flip the card
   useEffect(() => {
     const onToggleInfo = () => setIsFlipped(s => !s);
-    window.addEventListener('pswp-toggle-info', onToggleInfo as any);
-    return () => window.removeEventListener('pswp-toggle-info', onToggleInfo as any);
+    window.addEventListener('pswp-toggle-info', onToggleInfo);
+    return () => window.removeEventListener('pswp-toggle-info', onToggleInfo);
   }, []);
 
   // do not auto-flip based on item presence anymore
 
   const isVideo = !!item?.video;
-  const items: any[] = (typeof window !== 'undefined' && (window as any).__photoSwipeItems) || [];
+  const items: LightboxItem[] = itemsState;
   const thumbContainerRef = React.useRef<HTMLDivElement | null>(null);
   const [videoDurations, setVideoDurations] = useState<Record<string, string>>({});
   const formatTime = (sec: number) => {
@@ -76,7 +85,7 @@ const PhotoLeftPanel: React.FC = () => {
     };
   }, [videoDurations]);
   React.useEffect(() => {
-    items.filter(it => it.video).forEach(it => registerVideoDuration(it.video.src));
+  items.forEach(it => { if (it.video) registerVideoDuration(it.video.src); });
   }, [items, registerVideoDuration]);
   React.useEffect(() => {
     if (!thumbContainerRef.current) return;
@@ -122,7 +131,7 @@ const PhotoLeftPanel: React.FC = () => {
   const gotoSlide = (i: number) => {
     const attempt = (retries = 3) => {
       try {
-        const api = (window as any)?.__photoSwipeInstance || (window as any)?.pswpRef?.current?.pswp;
+        const api = (window as Window & { __photoSwipeInstance?: { goTo?: (n: number) => void } })?.__photoSwipeInstance;
         if (api && typeof api.goTo === 'function') {
           api.goTo(i);
           return;
@@ -132,7 +141,7 @@ const PhotoLeftPanel: React.FC = () => {
     };
     // optimistic event dispatch so panel UI updates instantly
     try {
-      const items: any[] = (window as any).__photoSwipeItems || [];
+  const items: LightboxItem[] = (window as Window & { __photoSwipeItems?: LightboxItem[] }).__photoSwipeItems ?? [];
       const it = items[i];
       if (it) {
         window.dispatchEvent(new CustomEvent('pswp-slide-change', { detail: { item: it, index: i, total: items.length, items } }));
@@ -157,8 +166,10 @@ const PhotoLeftPanel: React.FC = () => {
               data-thumb
             >
               {it.video ? (
+                // eslint-disable-next-line @next/next/no-img-element -- custom lazy loading via IntersectionObserver
                 <img data-src={it.video.poster || it.video.src} alt={it.title || ''} className="object-cover w-full h-full opacity-80 group-hover:opacity-100" />
               ) : (
+                // eslint-disable-next-line @next/next/no-img-element -- custom lazy loading via IntersectionObserver
                 <img data-src={it.src} alt={it.title || ''} className="object-cover w-full h-full opacity-80 group-hover:opacity-100" />
               )}
               {it.video && videoDurations[it.video.src] && (
@@ -179,9 +190,11 @@ const PhotoLeftPanel: React.FC = () => {
         >
           {isVideo ? (
             <div className="relative">
+              {item.video && (
               <video id="pswp-active-video" src={item.video.src} poster={item.video.poster} controls playsInline className="w-full max-h-64 object-contain rounded peer">
                 <track kind="captions" label="Captions" />
               </video>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -196,7 +209,7 @@ const PhotoLeftPanel: React.FC = () => {
               </button>
             </div>
           ) : (
-            <img src={item.src} alt={item.title} className="w-full object-cover rounded" />
+            <Image src={item.src || ''} alt={item.title || ''} width={800} height={600} className="w-full object-cover rounded" loading="lazy" />
           )}
           <div className="mt-2 font-semibold">{item.title}</div>
           <div className="text-xs text-muted-foreground/70">Press Enter or Space for details</div>
@@ -215,7 +228,8 @@ const PhotoLeftPanel: React.FC = () => {
 const ProductShowcaseInner = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
-  const [manifestMap, setManifestMap] = useState<Record<string, any>>({});
+  interface ManifestEntry { image: string; w?: number; h?: number; blurDataURL?: string; parsedExif?: ExifData | (Record<string, unknown> & Partial<ExifData>); dominantColor?: string }
+  const [manifestMap, setManifestMap] = useState<Record<string, ManifestEntry>>({});
   const searchParams = useSearchParams();
   const initialCats = (() => {
     const raw = searchParams?.get('cats');
@@ -255,9 +269,9 @@ const ProductShowcaseInner = () => {
       try {
         const res = await fetch('/image-manifest.json');
         if (!res.ok) return;
-        const data = await res.json();
+        const data: ManifestEntry[] = await res.json();
         if (!mounted) return;
-        const map: Record<string, any> = {};
+        const map: Record<string, ManifestEntry> = {};
         for (const entry of data) {
           if (entry.image) map[entry.image] = entry;
         }
@@ -276,11 +290,12 @@ const ProductShowcaseInner = () => {
   const [loadedMap, setLoadedMap] = useState<Record<number, boolean>>({});
 
   // build items for the currently selected gallery (selected by index)
-  const galleryItemsFor = (idx: number) => {
+  interface LightboxBuildItem extends GalleryLightboxItem { w: number; h: number; title: string; caption: string; exif: ExifData | null; blurDataURL: string | null }
+  const galleryItemsFor = (idx: number): LightboxBuildItem[] => {
     const g = galleries[idx];
     if (!g) return [];
-    return (g.images || [{ src: g.image, title: g.title }]).map((it: any) => {
-      const m = manifestMap[it.src] || manifestMap[g.image] || {};
+    return (g.images || [{ src: g.image, title: g.title }]).map((it) => {
+      const m = manifestMap[it.src] || manifestMap[g.image] || ({} as ManifestEntry);
       return {
         src: it.src,
         video: it.video,
@@ -288,7 +303,7 @@ const ProductShowcaseInner = () => {
         h: m?.h || 1200,
         title: it.title || g.title,
         caption: it.title || g.title,
-        exif: m?.parsedExif || null,
+  exif: (m?.parsedExif as ExifData | undefined) || null,
         blurDataURL: m?.blurDataURL || null,
       };
     });
@@ -351,7 +366,7 @@ const ProductShowcaseInner = () => {
         </div>
         {/* shared GalleryLightbox for the selected gallery */}
         <GalleryLightbox
-          items={activeGallery !== null ? galleryItemsFor(activeGallery) : []}
+          items={(activeGallery !== null ? galleryItemsFor(activeGallery) : [])}
           index={photoIndex}
           open={activeGallery !== null}
           onClose={() => { setActiveGallery(null); setPhotoIndex(0); }}

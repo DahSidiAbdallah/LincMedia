@@ -18,12 +18,18 @@ type ToasterToast = ToastProps & {
   action?: ToastActionElement
 }
 
+// Using a const object both at runtime and for its type; all values identical to keys.
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
   UPDATE_TOAST: "UPDATE_TOAST",
   DISMISS_TOAST: "DISMISS_TOAST",
   REMOVE_TOAST: "REMOVE_TOAST",
-} as const
+} as const;
+
+// Runtime reference to avoid eslint unused-vars complaint when only used for typing
+// (kept extremely cheap; will be tree-shaken/minified)
+// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+actionTypes.ADD_TOAST;
 
 let count = 0
 

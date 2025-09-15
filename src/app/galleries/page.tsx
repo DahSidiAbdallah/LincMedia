@@ -4,6 +4,7 @@ import { allGalleryImages, galleries } from '@/data/galleries';
 import GalleryLightbox from '@/components/ui/gallery-lightbox';
 import AnimatedWrapper from '@/components/ui/animated-wrapper';
 import Image from 'next/image';
+import Link from 'next/link';
 
 // Build unified items for the lightbox referencing the flattened index.
 const allImages = allGalleryImages();
@@ -37,7 +38,7 @@ export default function GalleriesPage() {
         <nav aria-label="Breadcrumb" className="mb-6 text-sm">
           <ol className="flex items-center gap-2 text-muted-foreground">
             <li>
-              <a href="/" className="hover:text-foreground focus:outline-none focus:underline">Home</a>
+              <Link href="/" className="hover:text-foreground focus:outline-none focus:underline">Home</Link>
             </li>
             <li className="select-none" aria-hidden>/</li>
             <li className="text-foreground font-medium" aria-current="page">Galleries</li>
@@ -119,7 +120,7 @@ const GalleryThumb: React.FC<ThumbProps> = ({ img, index, onOpen }) => {
       <Image
         src={img.src}
         alt={img.title}
-        fill={false as any}
+        /* Removed incorrect fill any-cast; explicit intrinsic sizing via width/height */
   width={600}
   height={400}
   sizes="(max-width:480px) 50vw,(max-width:768px) 33vw,(max-width:1280px) 25vw,20vw"

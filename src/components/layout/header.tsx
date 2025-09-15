@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
@@ -12,7 +13,7 @@ type HeaderProps = {
 const Header = ({ scrollToSection }: HeaderProps) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const mobilePanelRef = useRef<HTMLDivElement | null>(null);
+  const mobilePanelRef = useRef<HTMLDialogElement | null>(null);
   const mobileToggleRef = useRef<HTMLButtonElement | null>(null);
 
   // Close mobile menu helper
@@ -39,6 +40,20 @@ const Header = ({ scrollToSection }: HeaderProps) => {
     };
   }, []);
 
+  // Inert background while mobile menu open
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const body = document.body as HTMLElement & { inert?: boolean };
+    if (mobileOpen) {
+      body.setAttribute('aria-hidden','true');
+      body.inert = true;
+    } else {
+      body.removeAttribute('aria-hidden');
+      try { body.inert = false; } catch {}
+    }
+    return () => { try { body.removeAttribute('aria-hidden'); body.inert = false; } catch {}; };
+  }, [mobileOpen]);
+
   return (
     <header
       data-scrolled={isScrolled ? 'true' : 'false'}
@@ -54,21 +69,24 @@ const Header = ({ scrollToSection }: HeaderProps) => {
         isScrolled ? "h-16" : "h-20"
       )}>
         <button className="flex items-center gap-3" onClick={() => scrollToSection('hero')} aria-label="Go to top">
-          <img
+          <Image
             src="/LINC.png"
             alt="LincMedia"
+            width={120}
+            height={56}
+            priority
             className={cn(
-              'w-auto object-contain transition-all select-none pointer-events-none',
+              'w-auto h-14 md:h-16 object-contain transition-all select-none pointer-events-none',
               isScrolled
-                ? 'h-14 brightness-110 contrast-125 drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)] drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]'
-                : 'h-16 brightness-95'
+                ? 'brightness-110 contrast-125 drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)] drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]'
+                : 'brightness-95'
             )}
           />
         </button>
         {/* mobile menu button - visible on very small screens */}
         <button
           ref={mobileToggleRef}
-          className={cn('md:hidden ml-2 p-2 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/60', isScrolled ? 'text-white' : 'text-white')}
+          className={cn('md:hidden ml-2 p-2 rounded transition-colors text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/60')}
           onClick={() => setMobileOpen(s => !s)}
           aria-label="Toggle menu"
           aria-haspopup="dialog"
@@ -96,7 +114,7 @@ const Header = ({ scrollToSection }: HeaderProps) => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Contact Linc Media</DialogTitle>
-                <DialogDescription>Send a message and we'll get back to you.</DialogDescription>
+                <DialogDescription>Send a message and we&apos;ll get back to you.</DialogDescription>
               </DialogHeader>
               <form className="grid gap-2 mt-2">
                 <input placeholder="Name" className="border p-2 rounded" />
@@ -134,19 +152,19 @@ const Header = ({ scrollToSection }: HeaderProps) => {
         </nav>
         {/* mobile menu drawer */}
         {mobileOpen && (
-          <div
-            className="md:hidden fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-[2px] animate-fadeIn"
-            role="button"
+          <button
+            type="button"
+            className="md:hidden fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-[2px] animate-fadeIn focus:outline-none"
             aria-label="Close mobile menu"
-            tabIndex={0}
             onClick={(e) => { if (e.target === e.currentTarget) closeMobile(); }}
             onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeMobile(); } }}
           >
             <dialog
-              ref={mobilePanelRef as any}
+              ref={mobilePanelRef}
               open
               className="mt-20 w-full max-w-md bg-background/95 backdrop-blur-sm rounded-b-lg shadow-lg p-6 mx-4 transform transition-all duration-300 ease-out opacity-100 translate-y-0 focus:outline-none [&::backdrop]:hidden"
               aria-labelledby="mobile-menu-heading"
+              aria-modal="true"
             >
               <div className="flex items-start justify-between mb-2" id="mobile-menu-heading">
                 <h2 className="text-sm tracking-wide uppercase font-semibold text-muted-foreground">Menu</h2>
@@ -189,7 +207,7 @@ const Header = ({ scrollToSection }: HeaderProps) => {
                 </div>
               </div>
             </dialog>
-          </div>
+          </button>
         )}
       </div>
     </header>
