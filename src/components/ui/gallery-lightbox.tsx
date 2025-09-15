@@ -38,9 +38,23 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   // keep a weakly-typed ref without using raw `any` to satisfy lint
   const pswpRef = React.useRef<unknown>(null);
   const placeholderRef = React.useRef<HTMLDivElement | null>(null);
+  const liveRegionRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
     if (!placeholderRef.current) return;
+    // create / reuse live region
+    try {
+      let lr = document.getElementById('pswp-live-region') as HTMLDivElement | null;
+      if (!lr) {
+        lr = document.createElement('div');
+        lr.id = 'pswp-live-region';
+        lr.className = 'sr-only';
+        lr.setAttribute('aria-live','polite');
+        lr.setAttribute('role','status');
+        document.body.appendChild(lr);
+      }
+      liveRegionRef.current = lr;
+    } catch {}
 
   const dataSource = items.map((it) => {
       // Build title/exif HTML
@@ -159,11 +173,61 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   let prevContainerStyles: { left?: string | null; width?: string | null; paddingLeft?: string | null; zoomMaxWidth?: string | null; zoomMarginLeft?: string | null; transform?: string | null; scrollWrapLeft?: string | null; scrollWrapWidth?: string | null } = {};
   let lastScrollWrap: HTMLElement | null = null;
   let lastVideoEl: HTMLVideoElement | null = null;
-  // ensure we only apply the panel layout after PhotoSwipe has finished its initial sizing
-  let layoutApplied = false;
-  // we now always use container padding-left (simpler & more reliable than shifting scroll-wrap)
+  // mid-edge collapse handle
+  let collapseHandle: HTMLButtonElement | null = null;
+  let collapseHandleObserver: MutationObserver | null = null;
+  // NEW: collapse + flip-card state (lives within effect scope, resets each open)
+  let panelCollapsed = false;
+  let cardFlipped = false;
+  const panelRailWidth = 52; // width when collapsed (rail with icon)
 
-    const showToast = (text: string) => {
+  const setPanelCollapsed = (val: boolean, container?: HTMLElement | null) => {
+    panelCollapsed = val;
+    if (panelContainer) {
+      panelContainer.setAttribute('data-collapsed', String(panelCollapsed));
+    }
+    // when expanding, unflip card automatically
+    if (!panelCollapsed) {
+      cardFlipped = false;
+      const fc = document.querySelector('.pswp-flipcard');
+      if (fc) fc.classList.remove('is-flipped');
+    }
+    // re-apply layout to adjust offsets
+    try { applyPanelLayout(container || lastContainer); } catch {}
+    // update handle icon state
+    if (collapseHandle) {
+      collapseHandle.setAttribute('aria-expanded', String(!panelCollapsed));
+      collapseHandle.innerHTML = panelCollapsed ? '&#x25B6;' : '&#x25C0;'; // ► ◀ arrow styles
+      collapseHandle.title = panelCollapsed ? 'Expand panel' : 'Collapse panel';
+    }
+  };
+
+  const togglePanelCollapsed = (container?: HTMLElement | null) => setPanelCollapsed(!panelCollapsed, container);
+
+  const toggleFlipCard = () => {
+    if (!panelCollapsed) return; // only allow flipping when panel collapsed
+    cardFlipped = !cardFlipped;
+    const fc = document.querySelector('.pswp-flipcard');
+    if (fc) fc.classList.toggle('is-flipped', cardFlipped);
+    const front = fc?.querySelector('.pswp-flipcard-front') as HTMLElement | null;
+    const back = fc?.querySelector('.pswp-flipcard-back') as HTMLElement | null;
+    if (front && back) {
+      if (cardFlipped) {
+        front.setAttribute('aria-hidden','true');
+        back.setAttribute('aria-hidden','false');
+      } else {
+        front.setAttribute('aria-hidden','false');
+        back.setAttribute('aria-hidden','true');
+      }
+    }
+    // Apply flip animation through class instead of inline transform when toggled
+    const flipInner = document.querySelector('.pswp-flipcard-inner') as HTMLElement | null;
+    if (flipInner) {
+      if (cardFlipped) flipInner.classList.add('pswp-flipped'); else flipInner.classList.remove('pswp-flipped');
+    }
+  };
+
+  const showToast = (text: string) => {
       const t = document.createElement('div');
       t.className = 'fixed bottom-8 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded';
       t.textContent = text;
@@ -186,40 +250,78 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       return 380;
     };
 
+    // Ensure the floating collapse handle exists & is positioned
+    const ensureCollapseHandle = (container: HTMLElement | null, activePanelWidth: number, shouldHidePanel: boolean) => {
+      if (shouldHidePanel) {
+        if (collapseHandle) {
+          collapseHandle.style.opacity = '0';
+          collapseHandle.style.pointerEvents = 'none';
+        }
+        return;
+      }
+      if (!collapseHandle) {
+        collapseHandle = document.createElement('button');
+        collapseHandle.type = 'button';
+        collapseHandle.className = 'pswp-collapse-handle';
+        collapseHandle.setAttribute('aria-label', 'Toggle info panel');
+        collapseHandle.setAttribute('aria-expanded', String(!panelCollapsed));
+        collapseHandle.innerHTML = panelCollapsed ? '&#x25B6;' : '&#x25C0;';
+        collapseHandle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          setPanelCollapsed(!panelCollapsed, container || lastContainer);
+          try { localStorage.setItem('pswp_panel_collapsed', panelCollapsed ? 'true' : 'false'); } catch {}
+        });
+        try { document.body.appendChild(collapseHandle); } catch {}
+        // Observe for accidental removal (HMR, route transitions)
+        try {
+          collapseHandleObserver?.disconnect();
+          collapseHandleObserver = new MutationObserver(() => {
+            if (collapseHandle && !document.body.contains(collapseHandle)) {
+              try { document.body.appendChild(collapseHandle); } catch {}
+            }
+          });
+          collapseHandleObserver.observe(document.body, { childList: true });
+        } catch {}
+      }
+      collapseHandle.style.left = activePanelWidth + 'px';
+      collapseHandle.style.opacity = '1';
+      collapseHandle.style.pointerEvents = 'auto';
+    };
+
     const applyPanelLayout = (container: HTMLElement | null) => {
       if (!container || !panelContainer) return;
       const shouldHidePanel = window.innerWidth < hidePanelBelow;
-      const panelWidth = computePanelWidth();
+      const fullPanelWidth = computePanelWidth();
+      const activePanelWidth = panelCollapsed ? panelRailWidth : fullPanelWidth;
       panelContainer.style.display = shouldHidePanel ? 'none' : 'flex';
-      panelContainer.style.width = panelWidth + 'px';
+      panelContainer.style.width = activePanelWidth + 'px';
       const gutter = shouldHidePanel ? 0 : 32;
-      // record previous paddingLeft once (legacy cleanup compatibility)
       if (!prevContainerStyles.paddingLeft) prevContainerStyles.paddingLeft = container.style.paddingLeft || null;
-      // remove padding approach; rely on shifting scroll-wrap for precision
       container.style.paddingLeft = '0px';
       container.style.paddingRight = '0px';
       try { (container as HTMLElement).style.zIndex = '2147483600'; } catch {}
       try {
-        (container as HTMLElement).style.setProperty('--pswp-left-panel-width', shouldHidePanel ? '0px' : panelWidth + 'px');
+        (container as HTMLElement).style.setProperty('--pswp-left-panel-width', shouldHidePanel ? '0px' : activePanelWidth + 'px');
         (container as HTMLElement).style.setProperty('--pswp-left-panel-gutter', gutter + 'px');
       } catch {}
       try {
+        const leftOffset = shouldHidePanel ? 0 : (activePanelWidth + gutter);
         const scrollWrap = container.querySelector('.pswp__scroll-wrap') as HTMLElement | null;
         if (scrollWrap) {
           scrollWrap.style.position = 'relative';
-          scrollWrap.style.left = shouldHidePanel ? '0px' : (panelWidth + gutter) + 'px';
-          scrollWrap.style.width = shouldHidePanel ? '100%' : `calc(100% - ${panelWidth + gutter}px)`;
+          scrollWrap.style.left = leftOffset + 'px';
+          scrollWrap.style.width = shouldHidePanel ? '100%' : `calc(100% - ${leftOffset}px)`;
           scrollWrap.style.marginLeft = '0';
         }
         const bg = container.querySelector('.pswp__bg') as HTMLElement | null;
         if (bg) {
-          bg.style.left = shouldHidePanel ? '0px' : (panelWidth + gutter) + 'px';
-          bg.style.width = shouldHidePanel ? '100%' : `calc(100% - ${panelWidth + gutter}px)`;
+          bg.style.left = leftOffset + 'px';
+          bg.style.width = shouldHidePanel ? '100%' : `calc(100% - ${leftOffset}px)`;
         }
         const ui = container.querySelector('.pswp__ui') as HTMLElement | null;
         if (ui) {
-          ui.style.left = shouldHidePanel ? '0px' : (panelWidth + gutter) + 'px';
-          ui.style.width = shouldHidePanel ? '100%' : `calc(100% - ${panelWidth + gutter}px)`;
+          ui.style.left = leftOffset + 'px';
+          ui.style.width = shouldHidePanel ? '100%' : `calc(100% - ${leftOffset}px)`;
         }
         const containerEl = container.querySelector('.pswp__container') as HTMLElement | null;
         if (containerEl) {
@@ -227,8 +329,16 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           containerEl.style.maxWidth = '100%';
           containerEl.style.zIndex = '2147483610';
         }
+        if (panelContainer) {
+          const header = panelContainer.querySelector('.pswp-meta-header');
+          panelContainer.querySelectorAll(':scope > *:not(.pswp-meta-header):not(.pswp-panel-footer)').forEach(el => {
+            (el as HTMLElement).style.display = panelCollapsed ? 'none' : '';
+          });
+          if (header) (header as HTMLElement).style.borderBottom = panelCollapsed ? 'none' : '1px solid rgba(255,255,255,0.12)';
+        }
       } catch {}
       try { (pswpRef.current as any)?.pswp?.updateSize?.(true); } catch {}
+      ensureCollapseHandle(container, activePanelWidth, shouldHidePanel);
     };
 
     const createOverlay = (itemIndex: number, container: HTMLElement | null, reuse = false) => {
@@ -275,14 +385,37 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     panelContainer.style.width = computePanelWidth() + 'px';
     panelContainer.style.borderRight = '1px solid rgba(255,255,255,0.15)';
     panelContainer.style.boxSizing = 'border-box';
-    panelContainer.style.padding = '20px 16px 12px 20px';
-  panelContainer.style.zIndex = '2147483646';
+    panelContainer.style.padding = '12px 12px 8px 12px';
+    panelContainer.style.zIndex = '2147483646';
     panelContainer.style.background = 'rgba(15,15,15,0.78)';
     panelContainer.style.backdropFilter = 'blur(12px)';
     panelContainer.style.overflow = 'auto';
     panelContainer.style.display = 'flex';
     panelContainer.style.flexDirection = 'column';
+    // add attribute for collapsed state styling hooks
+    panelContainer.setAttribute('data-collapsed', 'false');
   }
+    // build header (collapse toggle + slide counter placeholder)
+    let headerEl = panelContainer.querySelector('.pswp-meta-header') as HTMLDivElement | null;
+    if (!headerEl) {
+      headerEl = document.createElement('div');
+      headerEl.className = 'pswp-meta-header flex items-center gap-2 mb-2 text-[11px] tracking-wide opacity-70';
+      headerEl.innerHTML = `
+        <button type="button" data-pswp-collapse aria-expanded="true" title="Collapse panel" style="background:rgba(255,255,255,0.1);border:0;color:#fff;width:28px;height:28px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;line-height:1;">⮜</button>
+        <div class="pswp-slide-count"></div>
+      `;
+      panelContainer.appendChild(headerEl);
+      // collapse toggle handler
+      headerEl.querySelector('[data-pswp-collapse]')?.addEventListener('click', () => {
+        const btn = headerEl!.querySelector('[data-pswp-collapse]') as HTMLButtonElement;
+        const newState = panelCollapsed ? false : true; // toggle collapse (true means currently expanded -> collapse)
+        setPanelCollapsed(!panelCollapsed, lastContainer);
+        const expanded = !panelCollapsed;
+        btn.setAttribute('aria-expanded', String(expanded));
+        btn.title = expanded ? 'Collapse panel' : 'Expand panel';
+        btn.textContent = expanded ? '⮜' : '⮞';
+      });
+    }
       const short = (it.caption || '').slice(0, 200);
       const more = (it.caption || '').length > 200;
       let exifHtml = '';
@@ -290,21 +423,37 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         const parts = Object.entries(it.exif).map(([k, v]) => `<div><strong>${k}:</strong> ${v}</div>`);
         exifHtml = `<div class="text-sm text-muted-foreground mt-2">${parts.join('')}</div>`;
       }
-      // If a React leftPanel isn't provided, render a simple HTML fallback into the panel container
+      // If a React leftPanel isn't provided, render a simple HTML fallback inside a body wrapper (so header / collapse button stay intact)
       if (!leftPanel && panelContainer) {
+        let panelBody = panelContainer.querySelector('.pswp-panel-body') as HTMLDivElement | null;
+        if (!panelBody) {
+          panelBody = document.createElement('div');
+          panelBody.className = 'pswp-panel-body flex flex-col';
+          // insert after header but before footer if footer exists
+          const footerExisting = panelContainer.querySelector('.pswp-panel-footer');
+            if (footerExisting) {
+              panelContainer.insertBefore(panelBody, footerExisting);
+            } else {
+              panelContainer.appendChild(panelBody);
+            }
+        }
         // Build thumbnail navigation + metadata
         const thumbs = items.map((itm, idx) => {
           const active = idx === itemIndex ? 'outline:2px solid #fff;' : '';
           return `<button data-pswp-go="${idx}" style="background:#111;border:0;padding:0;margin:0;cursor:pointer;${active}display:inline-block;width:62px;height:48px;overflow:hidden;border-radius:4px;"><img src="${itm.src || itm.video?.src || ''}" alt="thumb ${idx+1}" style="width:100%;height:100%;object-fit:cover;display:block;" /></button>`;
         }).join('');
-        panelContainer.innerHTML = `
-          <div class="text-[11px] tracking-wide mb-2 opacity-70">SLIDE ${itemIndex + 1} / ${items.length}</div>
+        panelBody.innerHTML = `
           <div class="pswp-thumb-bar flex flex-wrap gap-2 mb-4">${thumbs}</div>
           <div class="font-semibold line-clamp-2">${it.title || ''}</div>
           <div class="text-sm mt-2 leading-snug">${short}${more ? '...' : ''}</div>
           ${more ? '<button data-pswp-readmore class="mt-2 underline text-sm">Read more</button>' : ''}
           ${exifHtml}
         `;
+        // update slide counter in header
+        const slideCountEl = panelContainer.querySelector('.pswp-slide-count');
+        if (slideCountEl) {
+          slideCountEl.textContent = `SLIDE ${itemIndex + 1} / ${items.length}`;
+        }
       }
 
   // append meta panel and its footer controls to the fixed overlay container
@@ -405,6 +554,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         panelRoot?.unmount();
         panelRoot = null;
       } catch {}
+      try { collapseHandleObserver?.disconnect(); } catch {}
+      if (collapseHandle) { try { collapseHandle.remove(); } catch {}; collapseHandle = null; }
     };
 
     const restoreContainerStyles = () => {
@@ -444,6 +595,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       }, 120);
     };
     window.addEventListener('resize', onResize);
+    try { (window as any).forceCreatePswpCollapseHandle = () => { try { applyPanelLayout((pswpRef.current as any)?.pswp?.el || null); } catch {}; }; } catch {}
 
     (lightbox as any).on('open', (e: any) => {
       try {
@@ -456,18 +608,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           mountPanel(leftPanel);
         }
         createOverlay(startIndex, container);
-        try { (window as any).__photoSwipeInstance = (pswpRef.current as any)?.pswp || (pswpRef.current as any); } catch {}
-        // defer layout shift so PhotoSwipe can calculate initial bounds first
-        if (container) {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              if (!layoutApplied) {
-                applyPanelLayout(container);
-                layoutApplied = true;
-              }
-            });
-          });
-        }
+        // Early ensure handle after overlay creation
+        try { applyPanelLayout(container); } catch {}
         // fade-in first visible media
         if (container) applyPanelLayout(container);
   // progress bar removed
@@ -483,19 +625,25 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       } catch {}
     });
 
+    let layoutApplied = false; // track first layout
+
     (lightbox as any).on('change', (e: any) => {
       try {
         const pswpInstance = (pswpRef.current as any)?.pswp;
         const container = pswpInstance?.el || null;
-        // pause any previous video
         try { lastVideoEl?.pause(); } catch {}
         const currentIndex = typeof pswpInstance?.currIndex === 'number' ? pswpInstance.currIndex : (e?.detail?.index ?? 0);
         createOverlay(currentIndex, container, true);
+        // update flip card content & reset flipped state on slide change
+        if (panelCollapsed) {
+          cardFlipped = false;
+          const fc = document.querySelector('.pswp-flipcard');
+          fc?.classList.remove('is-flipped');
+        }
         if (leftPanel && panelContainer && !panelRoot) {
           mountPanel(leftPanel);
         }
         if (container) applyPanelLayout(container);
-        // re-dispatch slide-change explicitly to guarantee React panel sync
         try {
           const idx = currentIndex;
           const it = items[idx];
@@ -537,13 +685,14 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
     return () => {
       document.removeEventListener('keydown', onKey);
-      // ensure we restore any container styles when cleaning up
       try { restoreContainerStyles(); } catch {}
-  if (overlayEl) overlayEl.remove();
-  // progress bar removed
-  window.removeEventListener('resize', onResize);
-      lightbox.destroy();
-      pswpRef.current = null;
+      if (overlayEl) overlayEl.remove();
+      window.removeEventListener('resize', onResize);
+      const flipListener = (lightbox as any)._pswpFlipListener;
+      if (flipListener) document.removeEventListener('click', flipListener);
+      try { (pswpRef.current as any)?.destroy?.(); } catch {}
+      try { collapseHandleObserver?.disconnect(); } catch {}
+      if (collapseHandle) { try { collapseHandle.remove(); } catch {}; collapseHandle = null; }
     };
   }, [items, index, open, onClose]);
 
@@ -573,8 +722,21 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     (window as any).__pswpHelpVisible = false;
   }
 
+    // Throttled live announcement for slide changes
+    let _announceLast = 0;
+    const announceSlide = (idx: number) => {
+      const now = Date.now();
+      if (now - _announceLast < 300) return; // throttle 300ms to prevent SR spam
+      _announceLast = now;
+      if (!liveRegionRef.current) return;
+      try {
+        const item = items[idx];
+        liveRegionRef.current.textContent = `Slide ${idx + 1} of ${items.length}${item?.title ? ': ' + item.title : ''}`;
+      } catch {}
+    };
+
   return <div ref={placeholderRef} aria-label="Lightbox gallery" role="region" style={{ display: 'block' }} />;
-  // NOTE: replaced by semantic section would be better; kept div for minimal change. Lint rule flagged earlier.
+  // NOTE: replaced by semantic section would be better; kept div for minimal change.
 };
 
 export default GalleryLightbox;
