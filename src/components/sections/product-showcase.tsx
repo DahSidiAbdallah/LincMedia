@@ -167,10 +167,10 @@ const PhotoLeftPanel: React.FC = () => {
             >
               {it.video ? (
                 // eslint-disable-next-line @next/next/no-img-element -- custom lazy loading via IntersectionObserver
-                <img data-src={it.video.poster || it.video.src} alt={it.title || ''} className="object-cover w-full h-full opacity-80 group-hover:opacity-100" />
+                <img data-src={it.video.poster || it.video.src} alt={it.title || it.video?.poster ? it.title || 'Video thumbnail' : 'Gallery thumbnail'} className="object-cover w-full h-full opacity-80 group-hover:opacity-100" />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element -- custom lazy loading via IntersectionObserver
-                <img data-src={it.src} alt={it.title || ''} className="object-cover w-full h-full opacity-80 group-hover:opacity-100" />
+                <img data-src={it.src} alt={it.title || 'Gallery thumbnail'} className="object-cover w-full h-full opacity-80 group-hover:opacity-100" />
               )}
               {it.video && videoDurations[it.video.src] && (
                 <span className="absolute bottom-0 right-0 m-0.5 px-1 py-0.5 text-[10px] leading-none rounded bg-black/70 text-white font-medium">{videoDurations[it.video.src]}</span>
@@ -209,7 +209,7 @@ const PhotoLeftPanel: React.FC = () => {
               </button>
             </div>
           ) : (
-            <Image src={item.src || ''} alt={item.title || ''} width={800} height={600} className="w-full object-cover rounded" loading="lazy" />
+            <Image src={item.src || ''} alt={item.title || 'Gallery image'} width={800} height={600} className="w-full object-cover rounded" loading="lazy" />
           )}
           <div className="mt-2 font-semibold">{item.title}</div>
           <div className="text-xs text-muted-foreground/70">Press Enter or Space for details</div>

@@ -102,6 +102,11 @@ export default function GalleriesPage() {
   );
 }
 
+export const metadata = {
+  title: 'Galleries — LINC MEDIA',
+  description: 'Browse featured galleries from LINC MEDIA — portraits, landscapes, street photography and more.',
+};
+
 interface ThumbProps {
   img: (typeof allImages)[number];
   index: number;

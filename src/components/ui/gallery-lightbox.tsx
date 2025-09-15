@@ -837,7 +837,9 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       }
       const thumbs = items.map((itm, idx) => {
         const active = idx === itemIndex ? 'outline:2px solid #fff;' : '';
-        return `<button data-pswp-go="${idx}" style="background:#111;border:0;padding:0;margin:0;cursor:pointer;${active}display:inline-block;width:62px;height:48px;overflow:hidden;border-radius:4px;"><img src="${itm.src || itm.video?.src || ''}" alt="thumb ${idx+1}" style="width:100%;height:100%;object-fit:cover;display:block;" /></button>`;
+  // prefer descriptive alt text when available
+  const thumbAlt = itm.title ? itm.title.replace(/"/g, '') : `thumb ${idx+1}`;
+  return `<button data-pswp-go="${idx}" style="background:#111;border:0;padding:0;margin:0;cursor:pointer;${active}display:inline-block;width:62px;height:48px;overflow:hidden;border-radius:4px;"><img src="${itm.src || itm.video?.src || ''}" alt="${thumbAlt}" style="width:100%;height:100%;object-fit:cover;display:block;" /></button>`;
       }).join('');
       panelBody.innerHTML = `
         <div class="pswp-thumb-bar flex flex-wrap gap-2 mb-4">${thumbs}</div>

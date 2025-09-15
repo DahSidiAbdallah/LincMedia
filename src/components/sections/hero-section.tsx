@@ -24,16 +24,12 @@ const HeroSection = () => {
                 We are your partner in audio visual communications
               </p>
             </AnimatedWrapper>
-             <AnimatedWrapper delay="200ms">
-                <h1 className="text-5xl md:text-8xl font-bold text-primary-foreground leading-tight">
-                    CAPTURING
-                </h1>
-             </AnimatedWrapper>
-             <AnimatedWrapper delay="400ms">
-                <h1 className="text-5xl md:text-8xl font-bold text-primary-foreground leading-tight">
-                    MOMENTS & STORIES
-                </h1>
-             </AnimatedWrapper>
+       <AnimatedWrapper delay="200ms">
+        <h1 className="text-5xl md:text-8xl font-bold text-primary-foreground leading-tight">
+          <span className="block">CAPTURING</span>
+          <span className="block">MOMENTS &amp; STORIES</span>
+        </h1>
+       </AnimatedWrapper>
           </div>
           {/* subtle caption overlay: title + year + credit */}
           <div className="absolute left-6 bottom-8 bg-black/40 backdrop-blur-sm text-white rounded-md px-4 py-2 text-sm flex items-center gap-3">
