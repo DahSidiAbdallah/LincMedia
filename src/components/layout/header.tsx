@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { openExternal } from '@/lib/openExternal';
 
 type HeaderProps = {
   scrollToSection: (section: 'hero' | 'about' | 'works' | 'process' | 'contact') => void;
@@ -125,24 +126,24 @@ const Header = ({ scrollToSection }: HeaderProps) => {
           </Dialog>
           <div className="hidden sm:flex items-center gap-2 ml-2">
             {/* social icons (hidden on very small screens) - high contrast when unscrolled */}
-            <a title="Instagram" href="https://www.instagram.com/lincchevie" target="_blank" rel="noreferrer" aria-label="Instagram" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
+            <button type="button" title="Instagram" onClick={() => openExternal(undefined, 'https://www.instagram.com/lincchevie')} aria-label="Instagram" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="currentColor"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M17.5 6.5h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </a>
-            <a title="LinkedIn" href="https://www.linkedin.com/company/lincmedia/" target="_blank" rel="noreferrer" aria-label="LinkedIn" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
+            </button>
+            <button type="button" title="LinkedIn" onClick={() => openExternal(undefined, 'https://www.linkedin.com/company/lincmedia/')} aria-label="LinkedIn" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="currentColor"><path d="M4 4h4v16H4zM6 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM14 10v10h4v-6c0-3-4-2.5-4 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </a>
-            <a title="YouTube" href="https://www.youtube.com/@lincmedia495" target="_blank" rel="noreferrer" aria-label="YouTube" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
+            </button>
+            <button type="button" title="YouTube" onClick={() => openExternal(undefined, 'https://www.youtube.com/@lincmedia495')} aria-label="YouTube" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="currentColor"><path d="M22 7.2a2.4 2.4 0 0 0-1.7-1.7C18.4 5 12 5 12 5s-6.4 0-8.3.5A2.4 2.4 0 0 0 2 7.2 24 24 0 0 0 2 12a24 24 0 0 0 0 4.8 2.4 2.4 0 0 0 1.7 1.7C5.6 19 12 19 12 19s6.4 0 8.3-.5a2.4 2.4 0 0 0 1.7-1.7A24 24 0 0 0 22 12a24 24 0 0 0 0-4.8z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M10 15l5-3-5-3v6z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </a>
-            <a title="X" href="https://x.com/lchevi3" target="_blank" rel="noreferrer" aria-label="X" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
+            </button>
+            <button type="button" title="X" onClick={() => openExternal(undefined, 'https://x.com/lchevi3')} aria-label="X" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="currentColor"><path d="M23 3.5c-.8.3-1.6.5-2.5.6.9-.6 1.6-1.5 2-2.7-.8.5-1.7.9-2.7 1.1C18 1 16.7.5 15.3.5c-2.2 0-4 1.8-4 4 0 .3 0 .6.1.9C7.6 5.1 4.1 3.1 1.7.4c-.3.6-.4 1.2-.4 1.9 0 1.4.7 2.7 1.9 3.4-.7 0-1.3-.2-1.8-.5 0 2 1.4 3.7 3.3 4.1-.5.1-1 .2-1.6.1.5 1.6 2 2.8 3.7 2.8C6 17 3.6 18 1 18c2.1 1.4 4.6 2.2 7.3 2.2 8.8 0 13.6-7.3 13.6-13.6v-.6c.9-.7 1.6-1.5 2.2-2.5-.8.4-1.6.7-2.5.8z" stroke="currentColor" strokeWidth="0.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </a>
-            <a title="Tumblr" href="https://www.tumblr.com/lincchevie" target="_blank" rel="noreferrer" aria-label="Tumblr" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
+            </button>
+            <button type="button" title="Tumblr" onClick={() => openExternal(undefined, 'https://www.tumblr.com/lincchevie')} aria-label="Tumblr" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="currentColor"><path d="M17 3h-3c-.6 0-1 .4-1 1v3c0 .6-.4 1-1 1H9v3c0 1.7.9 2.9 3 3 0 0 2 0 3-1v3c0 1.1-.9 2-2 2h-1c-3 0-5-2.2-5-5V9H5V6h3V4c0-2.2 1.8-4 4-4h2v3z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </a>
-            <a title="Facebook" href="https://www.facebook.com/lincchevie" target="_blank" rel="noreferrer" aria-label="Facebook" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
+            </button>
+            <button type="button" title="Facebook" onClick={() => openExternal(undefined, 'https://www.facebook.com/lincchevie')} aria-label="Facebook" className={cn('p-1 rounded-full transition-all', isScrolled ? 'text-white hover:bg-white/10' : 'text-white ring-1 ring-white/20 bg-black/20') }>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="currentColor"><path d="M22 12a10 10 0 1 0-11.6 9.9v-7H8v-3h2.4V9.3c0-2.4 1.4-3.7 3.5-3.7 1 0 2 .2 2 .2v2.2h-1.1c-1.1 0-1.5.7-1.5 1.4V12H19l-.5 3h-2.5v7A10 10 0 0 0 22 12z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </a>
+            </button>
           </div>
           {/* mobile menu button */}
           {/* duplicate mobile toggle inside nav removed (now only one toggle) */}
@@ -184,24 +185,24 @@ const Header = ({ scrollToSection }: HeaderProps) => {
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Follow</p>
                 <div className="grid grid-cols-6 gap-2">
                   {/* Social icon buttons */}
-                  <a title="Instagram" href="https://www.instagram.com/lincchevie" target="_blank" rel="noreferrer" aria-label="Instagram" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
+                  <button type="button" title="Instagram" onClick={() => openExternal(undefined, 'https://www.instagram.com/lincchevie')} aria-label="Instagram" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M17.5 6.5h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </a>
-                  <a title="LinkedIn" href="https://www.linkedin.com/company/lincmedia/" target="_blank" rel="noreferrer" aria-label="LinkedIn" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
+                  </button>
+                  <button type="button" title="LinkedIn" onClick={() => openExternal(undefined, 'https://www.linkedin.com/company/lincmedia/')} aria-label="LinkedIn" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h4v16H4zM6 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM14 10v10h4v-6c0-3-4-2.5-4 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </a>
-                  <a title="YouTube" href="https://www.youtube.com/@lincmedia495" target="_blank" rel="noreferrer" aria-label="YouTube" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
+                  </button>
+                  <button type="button" title="YouTube" onClick={() => openExternal(undefined, 'https://www.youtube.com/@lincmedia495')} aria-label="YouTube" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22 7.2a2.4 2.4 0 0 0-1.7-1.7C18.4 5 12 5 12 5s-6.4 0-8.3.5A2.4 2.4 0 0 0 2 7.2 24 24 0 0 0 2 12a24 24 0 0 0 0 4.8 2.4 2.4 0 0 0 1.7 1.7C5.6 19 12 19 12 19s6.4 0 8.3-.5a2.4 2.4 0 0 0 1.7-1.7A24 24 0 0 0 22 12a24 24 0 0 0 0-4.8z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M10 15l5-3-5-3v6z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </a>
-                  <a title="X" href="https://x.com/lchevi3" target="_blank" rel="noreferrer" aria-label="X" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
+                  </button>
+                  <button type="button" title="X" onClick={() => openExternal(undefined, 'https://x.com/lchevi3')} aria-label="X" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M23 3.5c-.8.3-1.6.5-2.5.6.9-.6 1.6-1.5 2-2.7-.8.5-1.7.9-2.7 1.1C18 1 16.7.5 15.3.5c-2.2 0-4 1.8-4 4 0 .3 0 .6.1.9C7.6 5.1 4.1 3.1 1.7.4c-.3.6-.4 1.2-.4 1.9 0 1.4.7 2.7 1.9 3.4-.7 0-1.3-.2-1.8-.5 0 2 1.4 3.7 3.3 4.1-.5.1-1 .2-1.6.1.5 1.6 2 2.8 3.7 2.8C6 17 3.6 18 1 18c2.1 1.4 4.6 2.2 7.3 2.2 8.8 0 13.6-7.3 13.6-13.6v-.6c.9-.7 1.6-1.5 2.2-2.5-.8.4-1.6.7-2.5.8z" stroke="currentColor" strokeWidth="0.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </a>
-                  <a title="Tumblr" href="https://www.tumblr.com/lincchevie" target="_blank" rel="noreferrer" aria-label="Tumblr" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
+                  </button>
+                  <button type="button" title="Tumblr" onClick={() => openExternal(undefined, 'https://www.tumblr.com/lincchevie')} aria-label="Tumblr" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17 3h-3c-.6 0-1 .4-1 1v3c0 .6-.4 1-1 1H9v3c0 1.7.9 2.9 3 3 0 0 2 0 3-1v3c0 1.1-.9 2-2 2h-1c-3 0-5-2.2-5-5V9H5V6h3V4c0-2.2 1.8-4 4-4h2v3z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </a>
-                  <a title="Facebook" href="https://www.facebook.com/lincchevie" target="_blank" rel="noreferrer" aria-label="Facebook" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
+                  </button>
+                  <button type="button" title="Facebook" onClick={() => openExternal(undefined, 'https://www.facebook.com/lincchevie')} aria-label="Facebook" className='p-2 rounded-md flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/60 text-black hover:bg-black/5 dark:text-white dark:hover:bg-white/10'>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22 12a10 10 0 1 0-11.6 9.9v-7H8v-3h2.4V9.3c0-2.4 1.4-3.7 3.5-3.7 1 0 2 .2 2 .2v2.2h-1.1c-1.1 0-1.5.7-1.5 1.4V12H19l-.5 3h-2.5v7A10 10 0 0 0 22 12z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </a>
+                  </button>
                 </div>
               </div>
             </dialog>
