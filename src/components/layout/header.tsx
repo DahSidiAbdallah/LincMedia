@@ -40,18 +40,15 @@ const Header = ({ scrollToSection }: HeaderProps) => {
     };
   }, []);
 
-  // Inert background while mobile menu open
+  // Scroll lock while mobile menu open (avoids making entire body inert which blocked clicks)
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    const body = document.body as HTMLElement & { inert?: boolean };
+    const body = document.body;
     if (mobileOpen) {
-      body.setAttribute('aria-hidden','true');
-      body.inert = true;
-    } else {
-      body.removeAttribute('aria-hidden');
-      try { body.inert = false; } catch {}
+      const prev = body.style.overflow;
+      body.style.overflow = 'hidden';
+      return () => { body.style.overflow = prev; };
     }
-    return () => { try { body.removeAttribute('aria-hidden'); body.inert = false; } catch {}; };
   }, [mobileOpen]);
 
   return (
@@ -152,12 +149,12 @@ const Header = ({ scrollToSection }: HeaderProps) => {
         </nav>
         {/* mobile menu drawer */}
         {mobileOpen && (
-          <button
-            type="button"
-            className="md:hidden fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-[2px] animate-fadeIn focus:outline-none"
-            aria-label="Close mobile menu"
+          <div
+            role="presentation"
+            className="md:hidden fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-[2px] animate-fadeIn"
             onClick={(e) => { if (e.target === e.currentTarget) closeMobile(); }}
-            onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeMobile(); } }}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeMobile(); } }}
+            tabIndex={-1}
           >
             <dialog
               ref={mobilePanelRef}
@@ -165,6 +162,7 @@ const Header = ({ scrollToSection }: HeaderProps) => {
               className="mt-20 w-full max-w-md bg-background/95 backdrop-blur-sm rounded-b-lg shadow-lg p-6 mx-4 transform transition-all duration-300 ease-out opacity-100 translate-y-0 focus:outline-none [&::backdrop]:hidden"
               aria-labelledby="mobile-menu-heading"
               aria-modal="true"
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between mb-2" id="mobile-menu-heading">
                 <h2 className="text-sm tracking-wide uppercase font-semibold text-muted-foreground">Menu</h2>
@@ -207,7 +205,7 @@ const Header = ({ scrollToSection }: HeaderProps) => {
                 </div>
               </div>
             </dialog>
-          </button>
+          </div>
         )}
       </div>
     </header>

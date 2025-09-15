@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack -p 9002",
+  "dev": "next dev --turbopack -p ${PORT:-9002}",
+  "dev:free": "next dev --turbopack",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
   "generate-image-manifest": "node ./scripts/generate-image-manifest.js",
