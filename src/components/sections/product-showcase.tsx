@@ -9,7 +9,7 @@ import GalleryLightbox from '@/components/ui/gallery-lightbox';
 import { galleries } from '@/data/galleries';
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { getDominantColorFromUrl, rgbaFromRgb } from '@/lib/utils';
 import { useSearchParams } from 'next/navigation';
 
@@ -212,7 +212,7 @@ const PhotoLeftPanel: React.FC = () => {
   );
 };
 
-const ProductShowcase = () => {
+const ProductShowcaseInner = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const [manifestMap, setManifestMap] = useState<Record<string, any>>({});
@@ -441,6 +441,15 @@ const ProductShowcase = () => {
         </AnimatedWrapper>
       </div>
     </section>
+  );
+};
+
+// Export wrapped in Suspense to allow useSearchParams inside client component per Next.js requirement
+const ProductShowcase = () => {
+  return (
+    <Suspense fallback={<section className="py-20 md:py-32"><div className="container mx-auto text-sm opacity-60">Loading gallery...</div></section>}>
+      <ProductShowcaseInner />
+    </Suspense>
   );
 };
 

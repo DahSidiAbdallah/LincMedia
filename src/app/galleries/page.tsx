@@ -33,7 +33,7 @@ export default function GalleriesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 md:px-8 py-20">
+  <div className="container mx-auto px-3 sm:px-4 md:px-8 pt-20 pb-16 lg:pb-24">
         <nav aria-label="Breadcrumb" className="mb-6 text-sm">
           <ol className="flex items-center gap-2 text-muted-foreground">
             <li>
@@ -44,8 +44,8 @@ export default function GalleriesPage() {
           </ol>
         </nav>
         <AnimatedWrapper>
-          <h1 className="text-4xl md:text-6xl font-bold mb-6">All Galleries</h1>
-          <p className="text-muted-foreground max-w-2xl mb-12">A consolidated view of every featured gallery. Click any thumbnail to open the immersive lightbox experience and navigate through all images seamlessly.</p>
+          <h1 className="text-3xl xs:text-4xl md:text-6xl font-bold mb-4 md:mb-6 leading-tight">All Galleries</h1>
+          <p className="text-sm md:text-base text-muted-foreground max-w-2xl mb-8 md:mb-12">Browse every featured gallery. Tap a thumbnail to enter the immersive lightbox experience and swipe between images.</p>
         </AnimatedWrapper>
         <div className="mb-8 space-y-3">
           <div className="flex flex-wrap gap-2 items-center">
@@ -79,7 +79,7 @@ export default function GalleriesPage() {
             </div>
           )}
         </div>
-  <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 filter-anim-container">
+  <div className="grid gap-3 sm:gap-4 md:gap-5 grid-cols-2 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 filter-anim-container">
           {filteredImages.map((img, i) => (
             <GalleryThumb
               key={img.src + i}
@@ -112,8 +112,7 @@ const GalleryThumb: React.FC<ThumbProps> = ({ img, index, onOpen }) => {
   return (
     <button
       onClick={() => onOpen(index)}
-      className="group relative overflow-hidden rounded-lg focus:outline-none focus:ring-2 focus:ring-foreground shadow-sm hover:shadow-md transition-shadow"
-      style={{ aspectRatio: '3/2' }}
+  className="group relative overflow-hidden rounded-md md:rounded-lg focus:outline-none focus:ring-2 focus:ring-foreground shadow-sm hover:shadow-md transition-[box-shadow,transform] aspect-[3/2]"
       aria-label={`Open ${img.gallery} image ${img.title}`}
     >
       <div className={`absolute inset-0 transition-opacity duration-500 ${loaded ? 'opacity-0' : 'opacity-100'} bg-muted animate-pulse`} />
@@ -121,10 +120,10 @@ const GalleryThumb: React.FC<ThumbProps> = ({ img, index, onOpen }) => {
         src={img.src}
         alt={img.title}
         fill={false as any}
-        width={750}
-        height={500}
-        sizes="(max-width:640px) 70vw, (max-width:1024px) 33vw, (max-width:1536px) 20vw, 15vw"
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.08]"
+  width={600}
+  height={400}
+  sizes="(max-width:480px) 50vw,(max-width:768px) 33vw,(max-width:1280px) 25vw,20vw"
+  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.08] will-change-transform"
         onLoadingComplete={() => setLoaded(true)}
         loading="lazy"
       />
