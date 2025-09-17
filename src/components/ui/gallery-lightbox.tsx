@@ -1465,21 +1465,52 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         try {
           const pswpEl = getPswp(pswpRef)?.el;
           if (!pswpEl) return;
-          const currentMedia = pswpEl.querySelector('.pswp__item:not(.pswp__item--hidden) *:is(img,video)') as HTMLElement | null;
-          if (!currentMedia) return;
-          const hide = panelCollapsed; // Always hide when collapsed
-          if (hide) {
-            if (!currentMedia.dataset._origVisibility) currentMedia.dataset._origVisibility = currentMedia.style.visibility || '';
-            if (currentMedia.tagName === 'VIDEO') { try { (currentMedia as HTMLVideoElement).pause(); } catch {} }
-            currentMedia.style.visibility = 'hidden';
-          } else {
-            if (currentMedia.dataset._origVisibility !== undefined) {
-              currentMedia.style.visibility = currentMedia.dataset._origVisibility;
-              delete currentMedia.dataset._origVisibility;
+          const currentItem = pswpEl.querySelector('.pswp__item:not(.pswp__item--hidden)') as HTMLElement | null;
+          if (!currentItem) return;
+          const mediaTargets = Array.from(
+            currentItem.querySelectorAll<HTMLElement>('img, video, .pswp__img, .pswp__zoom-wrap, .pswp__content')
+          );
+          if (!mediaTargets.length) return;
+          const hide = Boolean(panelCollapsed && flipCardFlipped);
+          pswpEl.classList.toggle('pswp--flipcard-active', hide);
+          mediaTargets.forEach((media) => {
+            if (hide) {
+              if (media.dataset.origVisibility === undefined) media.dataset.origVisibility = media.style.visibility || '';
+              if (media.dataset.origOpacity === undefined) media.dataset.origOpacity = media.style.opacity || '';
+              if (media.dataset.origPointerEvents === undefined) media.dataset.origPointerEvents = media.style.pointerEvents || '';
+              if (media.tagName === 'VIDEO') {
+                try {
+                  (media as HTMLVideoElement).pause();
+                } catch {}
+              }
+              media.style.visibility = 'hidden';
+              media.style.opacity = '0';
+              media.style.pointerEvents = 'none';
+              media.setAttribute('aria-hidden', 'true');
             } else {
-              currentMedia.style.visibility = '';
+              if (media.dataset.origVisibility !== undefined) {
+                media.style.visibility = media.dataset.origVisibility;
+                delete media.dataset.origVisibility;
+              } else {
+                media.style.visibility = '';
+              }
+              if (media.dataset.origOpacity !== undefined) {
+                media.style.opacity = media.dataset.origOpacity;
+                delete media.dataset.origOpacity;
+              } else {
+                media.style.opacity = '';
+              }
+              if (media.dataset.origPointerEvents !== undefined) {
+                media.style.pointerEvents = media.dataset.origPointerEvents;
+                delete media.dataset.origPointerEvents;
+              } else {
+                media.style.pointerEvents = '';
+              }
+              if (media.hasAttribute('aria-hidden')) {
+                media.removeAttribute('aria-hidden');
+              }
             }
-          }
+          });
         } catch {}
       };
 
