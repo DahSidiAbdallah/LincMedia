@@ -266,6 +266,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   let flipCardPortal: HTMLDivElement | null = null;
   let flipCardRoot: ReactDOM.Root | null = null;
   let flipCardFlipped = false;
+  let flipCardActive = false; // NEW: overlay activation independent of collapse
   let currentSlideIndex = index;
   // removed unused: cardFlipped (flip state handled via DOM class only)
   const panelRailWidth = 52; // width when collapsed (rail with icon)
@@ -312,7 +313,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         transform: translateY(-50%) translateX(1px) !important;
         background: rgba(0,0,0,1) !important;
       }
-      .pswp-meta-panel-container[data-collapsed="true"] > *:not(.pswp-meta-header) {
+      /* When collapsed keep only header + footer (action controls) visible */
+      .pswp-meta-panel-container[data-collapsed="true"] > *:not(.pswp-meta-header):not(.pswp-panel-footer) {
         display: none !important;
       }
       .pswp-meta-panel-container[data-collapsed="true"] {
@@ -333,6 +335,53 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       .pswp-meta-header button[data-pswp-collapse]:active {
         transform: scale(0.95) !important;
       }
+      /* Hide underlying Photoswipe media when flipcard mode active (robust fallback) */
+      .pswp--flipcard-active .pswp__item:not(.pswp__item--hidden) img,
+      .pswp--flipcard-active .pswp__item:not(.pswp__item--hidden) video,
+      .pswp--flipcard-active .pswp__item:not(.pswp__item--hidden) .pswp__img,
+      .pswp--flipcard-active .pswp__item:not(.pswp__item--hidden) .pswp__zoom-wrap,
+      .pswp--flipcard-active .pswp__item:not(.pswp__item--hidden) .pswp__content { visibility: hidden !important; opacity:0 !important; pointer-events:none !important; }
+      .pswp--flipcard-active .pswp__bg { filter: blur(4px) brightness(0.5); transition: filter .35s ease; }
+      /* Collapsed rail restored so arrow accessible */
+      .pswp-meta-panel-container[data-collapsed="true"] {
+        --rail-width:32px;
+        max-width:var(--rail-width) !important;
+        min-width:var(--rail-width) !important;
+        width:var(--rail-width) !important;
+        padding:4px 2px 6px 2px !important;
+        background:linear-gradient(180deg,rgba(14,14,14,0.82),rgba(8,8,8,0.78)) !important;
+        border-right:1px solid rgba(255,255,255,0.05) !important;
+        box-shadow:4px 0 14px -6px rgba(0,0,0,0.55) !important;
+        overflow:hidden !important;
+        transition:max-width .35s cubic-bezier(.4,0,.2,1),width .35s cubic-bezier(.4,0,.2,1), background .3s ease, box-shadow .3s ease;
+        backdrop-filter:blur(4px) saturate(140%);
+      }
+      .pswp-meta-panel-container[data-collapsed="true"]:hover {
+        --rail-width:40px;
+        background:linear-gradient(180deg,rgba(20,20,20,0.9),rgba(12,12,12,0.85));
+        box-shadow:6px 0 20px -6px rgba(0,0,0,0.6);
+      }
+      /* Hide inner content except the collapse control; be more specific so button isn't affected */
+      .pswp-meta-panel-container[data-collapsed="true"] > *:not(.pswp-meta-header),
+      .pswp-meta-panel-container[data-collapsed="true"] .pswp-meta-header > *:not([data-pswp-collapse]) { display:none !important; }
+      .pswp-meta-panel-container[data-collapsed="true"] button[data-pswp-collapse] {
+        width:28px !important;
+        height:28px !important;
+        margin:0 auto !important;
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+        font-size:13px !important;
+        background:rgba(255,255,255,0.06) !important;
+        border:1px solid rgba(255,255,255,0.15) !important;
+        box-shadow:0 2px 6px -2px rgba(0,0,0,0.7) !important;
+        position:relative !important;
+        z-index:2 !important;
+      }
+      .pswp-meta-panel-container[data-collapsed="true"] button[data-pswp-collapse]:hover { background:rgba(255,255,255,0.14) !important; }
+      /* FlipCard active dimming (media still visible underneath) */
+      .pswp--info-dim .pswp__item:not(.pswp__item--hidden) *:is(img,video,canvas) { filter: brightness(.35) saturate(.8) blur(1px); transition:filter .4s ease; }
+      .pswp--info-dim .pswp__bg { filter:brightness(.25); transition:filter .4s ease; }
     `;
     document.head.appendChild(style);
   };
@@ -365,12 +414,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     if (panelContainer) {
       panelContainer.setAttribute('data-collapsed', String(panelCollapsed));
     }
-    if (!panelCollapsed) {
-      const fc = document.querySelector('.pswp-flipcard');
-      fc?.classList.remove('is-flipped');
-    }
     try { applyPanelLayout(container || lastContainer); } catch {}
-    syncFlipCardOverlay();
     if (collapseHandle) {
       collapseHandle.setAttribute('aria-expanded', String(!panelCollapsed));
       collapseHandle.innerHTML = panelCollapsed ? '&#x25B6;' : '&#x25C0;';
@@ -380,7 +424,6 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     if (prev !== panelCollapsed) {
       dispatchInfoEvent();
     }
-    try { updateUnderlyingMediaVisibility(); } catch {}
   };
 
   // removed unused togglePanelCollapsed / toggleFlipCard (logic retained in setPanelCollapsed)
@@ -1126,10 +1169,19 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
     const ensureFooterControls = (controls: HTMLDivElement) => {
       if (!panelContainer) return;
-      if (!panelContainer.querySelector('.pswp-panel-footer')) {
-        const footer = document.createElement('div');
+      // If collapsed, do not show footer in left panel
+      if (panelCollapsed) {
+        // Footer will be rendered in FlipCard overlay instead
+        const leftFooter = panelContainer.querySelector('.pswp-panel-footer');
+  if (leftFooter) (leftFooter as HTMLElement).style.display = 'none';
+        return;
+      }
+      // Normal: show footer in left panel
+      let footer = panelContainer.querySelector('.pswp-panel-footer');
+      if (!footer) {
+        footer = document.createElement('div');
         footer.className = 'pswp-panel-footer';
-        Object.assign(footer.style, {
+  Object.assign((footer as HTMLElement).style, {
           position: 'sticky',
           bottom: '0',
           left: '0',
@@ -1146,6 +1198,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         } as CSSStyleDeclaration);
         footer.appendChild(controls);
         panelContainer.appendChild(footer);
+      } else {
+  (footer as HTMLElement).style.display = 'flex';
       }
     };
 
@@ -1291,9 +1345,16 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       });
       controls.querySelector('[data-pswp-help]')?.addEventListener('click', () => toggleHelp());
       controls.querySelector('[data-pswp-meta]')?.addEventListener('click', () => {
-        try {
-          setPanelCollapsedEnhanced(!panelCollapsed, getPswp(pswpRef)?.el || null);
-        } catch {};
+        // Toggle flip card overlay only; do not collapse panel
+        try { flipCardActive = !flipCardActive; } catch {}
+        const rootEl = document.querySelector('.pswp');
+        if (flipCardActive) {
+          rootEl?.classList.add('pswp--info-dim');
+          syncFlipCardOverlay();
+        } else {
+          rootEl?.classList.remove('pswp--info-dim');
+          destroyFlipCardOverlay();
+        }
       });
     };
 
@@ -1337,10 +1398,11 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         flipCardPortal = null;
       }
       flipCardFlipped = false;
+      try { document.querySelector('.pswp')?.classList.remove('pswp--info-dim'); } catch {}
     };
 
     const updateFlipCardContent = (itemIndex: number) => {
-      if (!panelCollapsed) {
+      if (!flipCardActive) {
         destroyFlipCardOverlay();
         return;
       }
@@ -1356,9 +1418,20 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         : [];
       const handleToggle = () => { setFlipCardState(!flipCardFlipped, itemIndex); };
 
+      // Create action controls for overlay
+      const overlayControls = (
+        <div className="pswp-panel-footer flex justify-center items-center gap-2 mt-6 mb-2">
+          <button type="button" data-pswp-meta className="pswp-btn" title="(I/F) Toggle info panel" aria-label="Toggle info panel">Info</button>
+          <button type="button" data-pswp-download className="pswp-btn" aria-label="Download image">Download</button>
+          <button type="button" data-pswp-print className="pswp-btn" aria-label="Print image">Print</button>
+          <button type="button" data-pswp-share className="pswp-btn" aria-label="Share image">Share</button>
+          <button type="button" data-pswp-help className="pswp-btn" title="(?) Keyboard help" aria-label="Show keyboard shortcuts">?</button>
+        </div>
+      );
+
       flipCardRoot.render(
         <div className="pointer-events-none flex w-full justify-center">
-          <div className="pointer-events-auto w-full max-w-sm sm:max-w-md lg:max-w-lg">
+          <div className="pointer-events-auto w-full max-w-sm sm:max-w-md lg:max-w-lg flex flex-col items-center">
             <FlipCard
               disableOverlay
               isFlipped={flipCardFlipped}
@@ -1428,6 +1501,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
                 </button>
               </div>
             </FlipCard>
+            {/* Render action controls below FlipCard when collapsed */}
+            {overlayControls}
           </div>
         </div>
       );
@@ -1437,82 +1512,25 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       const idx = typeof itemIndexOverride === 'number' ? itemIndexOverride : currentSlideIndex;
       const next = Boolean(flipped);
       if (flipCardFlipped === next) {
-        if (panelCollapsed) updateFlipCardContent(idx);
+        if (flipCardActive) updateFlipCardContent(idx);
         return;
       }
       flipCardFlipped = next;
-      if (panelCollapsed) {
+      if (flipCardActive) {
         updateFlipCardContent(idx);
       } else {
         destroyFlipCardOverlay();
       }
-        try { updateUnderlyingMediaVisibility(); } catch {}
     };
 
     const syncFlipCardOverlay = (itemIndex?: number) => {
       const idx = typeof itemIndex === 'number' ? itemIndex : currentSlideIndex;
-      if (!panelCollapsed) {
-        destroyFlipCardOverlay();
-        return;
-      }
+      if (!flipCardActive) { destroyFlipCardOverlay(); return; }
+      try { document.querySelector('.pswp')?.classList.add('pswp--info-dim'); } catch {}
       ensureFlipCardContainer();
       updateFlipCardContent(idx);
-        try { updateUnderlyingMediaVisibility(); } catch {}
     };
 
-      // Hide underlying main media whenever the panel is collapsed so the flipcard is primary
-      const updateUnderlyingMediaVisibility = () => {
-        try {
-          const pswpEl = getPswp(pswpRef)?.el;
-          if (!pswpEl) return;
-          const currentItem = pswpEl.querySelector('.pswp__item:not(.pswp__item--hidden)') as HTMLElement | null;
-          if (!currentItem) return;
-          const mediaTargets = Array.from(
-            currentItem.querySelectorAll<HTMLElement>('img, video, .pswp__img, .pswp__zoom-wrap, .pswp__content')
-          );
-          if (!mediaTargets.length) return;
-          const hide = Boolean(panelCollapsed);
-          pswpEl.classList.toggle('pswp--flipcard-active', hide);
-          mediaTargets.forEach((media) => {
-            if (hide) {
-              if (media.dataset.origVisibility === undefined) media.dataset.origVisibility = media.style.visibility || '';
-              if (media.dataset.origOpacity === undefined) media.dataset.origOpacity = media.style.opacity || '';
-              if (media.dataset.origPointerEvents === undefined) media.dataset.origPointerEvents = media.style.pointerEvents || '';
-              if (media.tagName === 'VIDEO') {
-                try {
-                  (media as HTMLVideoElement).pause();
-                } catch {}
-              }
-              media.style.visibility = 'hidden';
-              media.style.opacity = '0';
-              media.style.pointerEvents = 'none';
-              media.setAttribute('aria-hidden', 'true');
-            } else {
-              if (media.dataset.origVisibility !== undefined) {
-                media.style.visibility = media.dataset.origVisibility;
-                delete media.dataset.origVisibility;
-              } else {
-                media.style.visibility = '';
-              }
-              if (media.dataset.origOpacity !== undefined) {
-                media.style.opacity = media.dataset.origOpacity;
-                delete media.dataset.origOpacity;
-              } else {
-                media.style.opacity = '';
-              }
-              if (media.dataset.origPointerEvents !== undefined) {
-                media.style.pointerEvents = media.dataset.origPointerEvents;
-                delete media.dataset.origPointerEvents;
-              } else {
-                media.style.pointerEvents = '';
-              }
-              if (media.hasAttribute('aria-hidden')) {
-                media.removeAttribute('aria-hidden');
-              }
-            }
-          });
-        } catch {}
-      };
 
     const onInfoToggleEvent = (event: Event) => {
       const detail = (event as CustomEvent<{ collapsed?: boolean; index?: number }>).detail;
@@ -1537,6 +1555,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       if (creating) {
         const root = ensureOverlayRoot();
         ensurePanelContainer();
+        // make sure styles exist before further DOM adjustments
+        try { ensureA11yStyles(); } catch {}
         ensurePanelHeader();
         const controls = document.createElement('div');
         controls.className = 'pointer-events-auto bg-black/40 backdrop-blur-sm text-white rounded-md px-2 py-2 flex items-center gap-2';
@@ -1556,7 +1576,6 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       wireThumbnails();
   try { updateSheetDialogA11y(itemIndex); } catch {}
       syncFlipCardOverlay(itemIndex);
-  try { updateUnderlyingMediaVisibility(); } catch {}
 
       // shift the PhotoSwipe content area to the right so the left panel does not overlap images (only first time)
       try {
@@ -1709,7 +1728,6 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         updateBackgroundInert();
         syncSheetFocusTrap();
         try { updateSheetDialogA11y(currentIndex); } catch {}
-        try { updateUnderlyingMediaVisibility(); } catch {}
       } catch {}
     });
 
