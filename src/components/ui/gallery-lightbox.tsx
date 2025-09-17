@@ -380,6 +380,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     if (prev !== panelCollapsed) {
       dispatchInfoEvent();
     }
+    try { updateUnderlyingMediaVisibility(); } catch {}
   };
 
   // removed unused togglePanelCollapsed / toggleFlipCard (logic retained in setPanelCollapsed)
@@ -1149,23 +1150,144 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     };
 
     const wireControlButtons = (controls: HTMLDivElement, it: Item) => {
-      controls.querySelector('[data-pswp-download]')?.addEventListener('click', () => {
-        const a = document.createElement('a');
-        a.href = it.src || it.video?.src || '';
-        a.download = (it.title || 'image').replace(/\s+/g, '_') + '.jpg';
-        a.click();
-      });
-      controls.querySelector('[data-pswp-print]')?.addEventListener('click', () => {
-        const w = window.open(it.src, '_blank');
-        if (w) w.print();
-      });
-      controls.querySelector('[data-pswp-share]')?.addEventListener('click', async () => {
-        if ("share" in navigator && typeof navigator.share === 'function') {
-          try { await navigator.share({ title: it.title, url: it.src || it.video?.src || '' }); } catch {}
-        } else {
-          try { await navigator.clipboard.writeText(it.src || it.video?.src || ''); } catch {}
-          showToast('Image URL copied to clipboard');
+      // --------------------------- DOWNLOAD ---------------------------
+      controls.querySelector('[data-pswp-download]')?.addEventListener('click', async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const url = it.src || it.video?.src || '';
+        if (!url) return;
+        try {
+          const res = await fetch(url, { mode: 'cors' });
+          const blob = await res.blob();
+          const ext = (blob.type && blob.type.split('/')[1]) || 'jpg';
+          const objectUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = ((it.title || 'media').replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_\-.]/g,'') || 'download') + '.' + ext;
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { URL.revokeObjectURL(objectUrl); a.remove(); }, 1500);
+          showToast('Download started');
+        } catch {
+          // fallback open
+          const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click();
         }
+      });
+
+      // ----------------------------- PRINT ----------------------------
+      controls.querySelector('[data-pswp-print]')?.addEventListener('click', async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const rawUrl = it.src || it.video?.poster || it.video?.src || '';
+        if (!rawUrl) return;
+        const isVideo = Boolean(it.video?.src);
+        // For video we attempt to print poster frame if available
+        if (isVideo && !it.video?.poster) {
+          // If no poster, just open video URL in new tab as fallback
+          window.open(rawUrl, '_blank','noopener');
+          return;
+        }
+        const title = (it.title || 'Print').replace(/[<>]/g,'');
+        const printWin = window.open('', 'pswpPrint', 'noopener,width=920,height=760');
+        if (!printWin) return;
+        let dataUrl: string | null = null;
+        try {
+          const res = await fetch(rawUrl, { mode: 'cors' });
+          const blob = await res.blob();
+          // If blob is very small could be error; guard
+          if (blob.size > 0) {
+            // Convert to data URL for guaranteed availability in new window
+            dataUrl = await new Promise<string>((resolve, reject) => {
+              const fr = new FileReader();
+              fr.onerror = () => reject(new Error('read-fail'));
+              fr.onload = () => resolve(String(fr.result));
+              fr.readAsDataURL(blob);
+            });
+          }
+        } catch { /* ignore fetch errors; fallback to raw url */ }
+        const imgSrc = dataUrl || rawUrl;
+        const html = `<!DOCTYPE html><html><head><title>${title}</title><meta charset='utf-8'/><style>
+          html,body{margin:0;padding:0;height:100%;background:#111;color:#eee;font-family:system-ui,sans-serif}
+          body{display:flex;align-items:center;justify-content:center}
+          .frame{max-width:100%;max-height:100%;object-fit:contain;}
+          @media print { body{background:#000;} .hint{display:none;} }
+          .hint{position:fixed;bottom:8px;left:50%;transform:translateX(-50%);font:11px/1.2 system-ui,sans-serif;letter-spacing:.08em;opacity:.55}
+        </style></head><body>
+          <img id='toPrint' alt='${title}' class='frame' src='${imgSrc}' />
+          <div class='hint'>Preparing print...</div>
+          <script>
+            const img = document.getElementById('toPrint');
+            function doPrint(){ try{ window.focus(); setTimeout(()=>{ window.print(); }, 60); }catch(e){} }
+            if (img.complete) { doPrint(); } else { img.addEventListener('load', doPrint, { once:true }); img.addEventListener('error', ()=>{ document.body.innerHTML='<p style="color:#eee;font:14px system-ui">Failed to load media.</p>'; }); }
+          <\/script>
+        </body></html>`;
+        try { printWin.document.open(); printWin.document.write(html); printWin.document.close(); } catch {}
+      });
+
+      // ----------------------------- SHARE ----------------------------
+      controls.querySelector('[data-pswp-share]')?.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const existing = document.getElementById('pswp-share-pop');
+        if (existing) { existing.remove(); return; }
+        const shareUrlRaw = it.src || it.video?.src || window.location.href;
+        const shareUrl = encodeURIComponent(shareUrlRaw);
+        const text = encodeURIComponent(it.title || 'Check this out');
+        const pop = document.createElement('div');
+        pop.id = 'pswp-share-pop';
+        pop.className = 'fixed bottom-24 left-1/2 -translate-x-1/2 z-[2147483646] rounded-lg border border-white/15 bg-black/85 backdrop-blur px-3 py-3 shadow-2xl flex flex-col gap-3 w-64';
+        pop.innerHTML = `
+          <div class='flex items-center justify-between'>
+            <div class='text-xs font-semibold tracking-wide uppercase text-white/60'>Share</div>
+            <button type='button' data-close class='text-white/50 hover:text-white text-sm' aria-label='Close share panel'>&times;</button>
+          </div>
+          <div class='grid grid-cols-3 gap-2 text-[11px]'>
+            <button data-s="x" class='pswp-share-btn'>X</button>
+            <button data-s="facebook" class='pswp-share-btn'>Facebook</button>
+            <button data-s="linkedin" class='pswp-share-btn'>LinkedIn</button>
+            <button data-s="reddit" class='pswp-share-btn'>Reddit</button>
+            <button data-s="pinterest" class='pswp-share-btn'>Pinterest</button>
+            <button data-s="email" class='pswp-share-btn'>Email</button>
+            <button data-s="whatsapp" class='pswp-share-btn'>WhatsApp</button>
+            <button data-s="telegram" class='pswp-share-btn'>Telegram</button>
+            <button data-s="copy" class='pswp-share-btn col-span-3 !mt-1'>Copy Link</button>
+          </div>
+        `;
+        if (!document.getElementById('pswp-share-pop-styles')) {
+          const style = document.createElement('style');
+          style.id = 'pswp-share-pop-styles';
+          style.textContent = `#pswp-share-pop .pswp-share-btn{background:rgba(255,255,255,0.09);padding:6px 6px;border-radius:6px;color:#fff;transition:.18s;display:flex;align-items:center;justify-content:center;min-height:34px;font-weight:500;line-height:1.1}#pswp-share-pop .pswp-share-btn:hover{background:rgba(255,255,255,0.2)}#pswp-share-pop .pswp-share-btn:active{background:rgba(255,255,255,0.3)}`;
+          document.head.appendChild(style);
+        }
+        document.body.appendChild(pop);
+        const openWin = (u: string) => { window.open(u, '_blank','noopener,noreferrer'); };
+        const map: Record<string,string> = {
+          x: `https://twitter.com/intent/tweet?url=${shareUrl}&text=${text}`,
+          facebook: `https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`,
+          linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`,
+          reddit: `https://www.reddit.com/submit?url=${shareUrl}&title=${text}`,
+          pinterest: `https://pinterest.com/pin/create/button/?url=${shareUrl}&description=${text}`,
+          email: `mailto:?subject=${text}&body=${shareUrl}`,
+          whatsapp: `https://api.whatsapp.com/send?text=${text}%20${shareUrl}`,
+          telegram: `https://t.me/share/url?url=${shareUrl}&text=${text}`
+        };
+        const removePop = () => { try { pop.remove(); } catch {}; document.removeEventListener('mousedown', onOutside); document.removeEventListener('keydown', onKey); };
+        const onOutside = (evt: MouseEvent) => { if (!pop.contains(evt.target as Node)) removePop(); };
+        const onKey = (evt: KeyboardEvent) => { if (evt.key === 'Escape') removePop(); };
+        document.addEventListener('mousedown', onOutside);
+        document.addEventListener('keydown', onKey);
+        pop.querySelector('[data-close]')?.addEventListener('click', (ev) => { ev.preventDefault(); removePop(); });
+        pop.querySelectorAll('[data-s]').forEach(btn => {
+          btn.addEventListener('click', async (ev) => {
+            ev.preventDefault(); ev.stopPropagation();
+            const key = (btn as HTMLElement).getAttribute('data-s') || '';
+            if (key === 'copy') {
+              try { await navigator.clipboard.writeText(shareUrlRaw); showToast('Link copied'); } catch { prompt('Copy link:', shareUrlRaw); }
+              removePop();
+              return;
+            }
+            const target = map[key];
+            if (target) { openWin(target); removePop(); }
+          });
+        });
+        // Focus first button for accessibility
+        (pop.querySelector('[data-s]') as HTMLElement | null)?.focus?.();
       });
       controls.querySelector('[data-pswp-help]')?.addEventListener('click', () => toggleHelp());
       controls.querySelector('[data-pswp-meta]')?.addEventListener('click', () => {
@@ -1324,6 +1446,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       } else {
         destroyFlipCardOverlay();
       }
+        try { updateUnderlyingMediaVisibility(); } catch {}
     };
 
     const syncFlipCardOverlay = (itemIndex?: number) => {
@@ -1334,7 +1457,31 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       }
       ensureFlipCardContainer();
       updateFlipCardContent(idx);
+        try { updateUnderlyingMediaVisibility(); } catch {}
     };
+
+      // Hide underlying main media when collapsed (flipcard active) to avoid double view
+      const updateUnderlyingMediaVisibility = () => {
+        try {
+          const pswpEl = getPswp(pswpRef)?.el;
+          if (!pswpEl) return;
+          const currentMedia = pswpEl.querySelector('.pswp__item:not(.pswp__item--hidden) *:is(img,video)') as HTMLElement | null;
+          if (!currentMedia) return;
+          const hide = panelCollapsed; // Always hide when collapsed
+          if (hide) {
+            if (!currentMedia.dataset._origVisibility) currentMedia.dataset._origVisibility = currentMedia.style.visibility || '';
+            if (currentMedia.tagName === 'VIDEO') { try { (currentMedia as HTMLVideoElement).pause(); } catch {} }
+            currentMedia.style.visibility = 'hidden';
+          } else {
+            if (currentMedia.dataset._origVisibility !== undefined) {
+              currentMedia.style.visibility = currentMedia.dataset._origVisibility;
+              delete currentMedia.dataset._origVisibility;
+            } else {
+              currentMedia.style.visibility = '';
+            }
+          }
+        } catch {}
+      };
 
     const onInfoToggleEvent = (event: Event) => {
       const detail = (event as CustomEvent<{ collapsed?: boolean; index?: number }>).detail;
@@ -1378,6 +1525,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       wireThumbnails();
   try { updateSheetDialogA11y(itemIndex); } catch {}
       syncFlipCardOverlay(itemIndex);
+  try { updateUnderlyingMediaVisibility(); } catch {}
 
       // shift the PhotoSwipe content area to the right so the left panel does not overlap images (only first time)
       try {
@@ -1530,6 +1678,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         updateBackgroundInert();
         syncSheetFocusTrap();
         try { updateSheetDialogA11y(currentIndex); } catch {}
+        try { updateUnderlyingMediaVisibility(); } catch {}
       } catch {}
     });
 
