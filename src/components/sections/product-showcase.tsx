@@ -57,7 +57,14 @@ const PhotoLeftPanel: React.FC = () => {
 
   // Allow the global "Info" control inside the panel to flip the card
   useEffect(() => {
-    const onToggleInfo = () => setIsFlipped(s => !s);
+    const onToggleInfo = (event: Event) => {
+      const detail = (event as CustomEvent<{ collapsed?: boolean }>).detail;
+      if (detail && typeof detail.collapsed === 'boolean') {
+        setIsFlipped(detail.collapsed);
+      } else {
+        setIsFlipped(prev => !prev);
+      }
+    };
     window.addEventListener('pswp-toggle-info', onToggleInfo);
     return () => window.removeEventListener('pswp-toggle-info', onToggleInfo);
   }, []);
