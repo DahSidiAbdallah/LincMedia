@@ -218,7 +218,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       try {
         const { overlayMode } = getLayoutState();
         if (overlayMode && !panelCollapsed) {
-          setPanelCollapsed(true, getPswp(pswpRef)?.el || null);
+          setPanelCollapsedEnhanced(true, getPswp(pswpRef)?.el || null);
           return;
         }
       } catch {}
@@ -230,7 +230,14 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       if (raw === 'Escape') { handleEscape(); return; }
       if (raw === '?' || (raw === '/' && e.shiftKey)) { try { toggleHelp(); } catch {}; return; }
       const k = raw.length === 1 ? raw.toLowerCase() : raw;
-      if (k === 'i' || k === 'f') { try { window.dispatchEvent(new CustomEvent('pswp-toggle-info')); } catch {}; return; }
+      if (k === 'i' || k === 'f') { 
+        try { 
+          // Toggle both the panel collapse and dispatch toggle-info for flip cards
+          setPanelCollapsedEnhanced(!panelCollapsed, getPswp(pswpRef)?.el || null);
+          window.dispatchEvent(new CustomEvent('pswp-toggle-info'));
+        } catch {}; 
+        return; 
+      }
       if (k === 'c') { jumpNextSameCategory(); }
     };
 
@@ -265,7 +272,62 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     if (document.getElementById('pswp-sheet-a11y-styles')) return;
     const style = document.createElement('style');
     style.id = 'pswp-sheet-a11y-styles';
-    style.textContent = `@keyframes pswpFocusFlash {0%{box-shadow:0 0 0 0 rgba(110,168,255,0.85);}100%{box-shadow:0 0 0 8px rgba(110,168,255,0);}}\n.pswp-focus-flash{outline:2px solid #6ea8ff;outline-offset:2px;animation:pswpFocusFlash 560ms ease;}\n`;
+    style.textContent = `
+      @keyframes pswpFocusFlash {0%{box-shadow:0 0 0 0 rgba(110,168,255,0.85);}100%{box-shadow:0 0 0 8px rgba(110,168,255,0);}}
+      .pswp-focus-flash{outline:2px solid #6ea8ff;outline-offset:2px;animation:pswpFocusFlash 560ms ease;}
+      .pswp-collapse-handle {
+        position: fixed !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        width: 36px !important;
+        height: 64px !important;
+        background: rgba(0,0,0,0.85) !important;
+        border: 1px solid rgba(255,255,255,0.25) !important;
+        border-left: none !important;
+        border-radius: 0 8px 8px 0 !important;
+        color: white !important;
+        cursor: pointer !important;
+        z-index: 2147483650 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 16px !important;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        backdrop-filter: blur(12px) !important;
+        box-shadow: 2px 0 8px rgba(0,0,0,0.3) !important;
+      }
+      .pswp-collapse-handle:hover {
+        background: rgba(0,0,0,0.95) !important;
+        border-color: rgba(255,255,255,0.4) !important;
+        transform: translateY(-50%) translateX(2px) !important;
+        box-shadow: 4px 0 12px rgba(0,0,0,0.4) !important;
+      }
+      .pswp-collapse-handle:active {
+        transform: translateY(-50%) translateX(1px) !important;
+        background: rgba(0,0,0,1) !important;
+      }
+      .pswp-meta-panel-container[data-collapsed="true"] > *:not(.pswp-meta-header) {
+        display: none !important;
+      }
+      .pswp-meta-panel-container[data-collapsed="true"] {
+        width: 52px !important;
+        padding: 6px !important;
+      }
+      .pswp-meta-panel-container {
+        will-change: width, padding !important;
+      }
+      .pswp-meta-header button[data-pswp-collapse] {
+        transition: all 0.2s ease !important;
+        will-change: transform !important;
+      }
+      .pswp-meta-header button[data-pswp-collapse]:hover {
+        background: rgba(255,255,255,0.2) !important;
+        transform: scale(1.05) !important;
+      }
+      .pswp-meta-header button[data-pswp-collapse]:active {
+        transform: scale(0.95) !important;
+      }
+    `;
     document.head.appendChild(style);
   };
 
@@ -393,7 +455,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         collapseHandle.innerHTML = panelCollapsed ? '&#x25B6;' : '&#x25C0;';
         collapseHandle.addEventListener('click', (e) => {
           e.stopPropagation();
-          setPanelCollapsed(!panelCollapsed, container || lastContainer);
+          e.preventDefault();
+          setPanelCollapsedEnhanced(!panelCollapsed, container || lastContainer);
           try { localStorage.setItem('pswp_panel_collapsed', panelCollapsed ? 'true' : 'false'); } catch {}
         });
         try { document.body.appendChild(collapseHandle); } catch {}
@@ -414,18 +477,40 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     };
 
     const styleOverlayContentOffsets = (container: HTMLElement, leftOffset: number, overlayMode: boolean) => {
-  const q = (sel: string): HTMLElement | null => container.querySelector<HTMLElement>(sel);
+      const q = (sel: string): HTMLElement | null => container.querySelector<HTMLElement>(sel);
       const scrollWrap = q('.pswp__scroll-wrap');
       if (scrollWrap) {
         scrollWrap.style.position = 'relative';
         scrollWrap.style.left = leftOffset + 'px';
         scrollWrap.style.width = overlayMode ? '100%' : `calc(100% - ${leftOffset}px)`;
         scrollWrap.style.marginLeft = '0';
+        // Add smooth transitions for desktop mode
+        if (!overlayMode) {
+          scrollWrap.style.transition = 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1)';
+        } else {
+          scrollWrap.style.transition = '';
+        }
       }
       const bg = q('.pswp__bg');
-      if (bg) { bg.style.left = leftOffset + 'px'; bg.style.width = overlayMode ? '100%' : `calc(100% - ${leftOffset}px)`; }
+      if (bg) { 
+        bg.style.left = leftOffset + 'px'; 
+        bg.style.width = overlayMode ? '100%' : `calc(100% - ${leftOffset}px)`;
+        if (!overlayMode) {
+          bg.style.transition = 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1)';
+        } else {
+          bg.style.transition = '';
+        }
+      }
       const ui = q('.pswp__ui');
-      if (ui) { ui.style.left = leftOffset + 'px'; ui.style.width = overlayMode ? '100%' : `calc(100% - ${leftOffset}px)`; }
+      if (ui) { 
+        ui.style.left = leftOffset + 'px'; 
+        ui.style.width = overlayMode ? '100%' : `calc(100% - ${leftOffset}px)`;
+        if (!overlayMode) {
+          ui.style.transition = 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1)';
+        } else {
+          ui.style.transition = '';
+        }
+      }
       const containerEl = q('.pswp__container');
       if (containerEl) {
         containerEl.style.marginLeft = '0';
@@ -439,8 +524,36 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       const grip = document.createElement('div');
       grip.className = 'pswp-sheet-grip';
       Object.assign(grip.style, {
-        position: 'absolute', top: '8px', left: '50%', width: '52px', height: '5px', borderRadius: '3px', transform: 'translateX(-50%)', background: 'rgba(255,255,255,0.35)'
+        position: 'absolute', 
+        top: '8px', 
+        left: '50%', 
+        width: '64px', 
+        height: '4px', 
+        borderRadius: '2px', 
+        transform: 'translateX(-50%)', 
+        background: 'rgba(255,255,255,0.4)',
+        cursor: 'grab',
+        transition: 'all 0.2s ease',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
       });
+      
+      // Add hover and active states
+      grip.addEventListener('mouseenter', () => {
+        grip.style.background = 'rgba(255,255,255,0.6)';
+        grip.style.width = '72px';
+      });
+      grip.addEventListener('mouseleave', () => {
+        grip.style.background = 'rgba(255,255,255,0.4)';
+        grip.style.width = '64px';
+      });
+      grip.addEventListener('mousedown', () => {
+        grip.style.cursor = 'grabbing';
+        grip.style.background = 'rgba(255,255,255,0.8)';
+      });
+      grip.addEventListener('mouseup', () => {
+        grip.style.cursor = 'grab';
+      });
+      
       panelContainer.appendChild(grip);
     };
 
@@ -448,13 +561,17 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       if (!panelContainer) return;
       const headerElGeneric = panelContainer.querySelector('.pswp-meta-header');
       const header = headerElGeneric instanceof HTMLElement ? headerElGeneric : null;
+      
+      // Hide/show content based on collapsed state
       panelContainer
         .querySelectorAll(':scope > *:not(.pswp-meta-header):not(.pswp-panel-footer)')
         .forEach(el => { (el as HTMLElement).style.display = panelCollapsed ? 'none' : ''; });
       if (header) {
         header.style.borderBottom = panelCollapsed ? 'none' : '1px solid rgba(255,255,255,0.12)';
       }
+      
       if (overlayMode) {
+        // Mobile/tablet mode - bottom sheet
         Object.assign(
           panelContainer.style,
           {
@@ -471,16 +588,30 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
             padding: panelCollapsed ? '6px 12px 6px 12px' : '14px 18px 16px 18px',
             background: 'linear-gradient(180deg,rgba(15,15,15,0.88),rgba(5,5,5,0.92))',
             backdropFilter: 'blur(18px)',
-            boxShadow: '0 -4px 28px -2px rgba(0,0,0,0.55)'
+            boxShadow: '0 -4px 28px -2px rgba(0,0,0,0.55)',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
           } as CSSStyleDeclaration
         );
         ensureBottomSheetGrip();
       } else {
+        // Desktop mode - side panel with smooth width transitions
+        const { activePanelWidth } = getLayoutState();
         Object.assign(panelContainer.style, {
+          position: 'fixed',
           top: '0',
           bottom: '0',
+          left: '0',
           height: 'auto',
-          borderRadius: '0'
+          borderRadius: '0',
+          borderRight: '1px solid rgba(255,255,255,0.15)',
+          borderTop: 'none',
+          background: 'rgba(15,15,15,0.88)',
+          backdropFilter: 'blur(12px)',
+          boxShadow: '2px 0 12px rgba(0,0,0,0.3)',
+          width: activePanelWidth + 'px',
+          padding: panelCollapsed ? '6px' : '12px 12px 8px 12px',
+          transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease',
+          overflow: panelCollapsed ? 'hidden' : 'auto'
         });
         panelContainer.querySelector('.pswp-sheet-grip')?.remove();
       }
@@ -523,17 +654,29 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           try { applyPanelLayout(getPswp(pswpRef)?.el || null); } catch {}
           return;
         }
-        panelContainer.style.transition = 'height 280ms cubic-bezier(.4,0,.2,1), padding 220ms ease';
-        panelContainer.style.willChange = 'height';
+        
+        // Enhanced animation with better easing
+        panelContainer.style.transition = 'height 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 0.3s ease';
+        panelContainer.style.willChange = 'height, padding';
+        
         const currentRect = panelContainer.getBoundingClientRect();
         const current = currentRect.height;
+        
         if (Math.abs(current - target) < 3) {
           panelContainer.style.height = target + 'px';
         } else {
           panelContainer.style.height = current + 'px';
-          requestAnimationFrame(() => { if (panelContainer) panelContainer.style.height = target + 'px'; });
+          requestAnimationFrame(() => { 
+            if (panelContainer) {
+              panelContainer.style.height = target + 'px';
+              // Enhanced backdrop blur effect during transition
+              panelContainer.style.backdropFilter = expand ? 'blur(18px)' : 'blur(12px)';
+            }
+          });
         }
+        
         panelContainer.style.padding = expand ? '14px 18px 16px 18px' : '6px 12px 6px 12px';
+        
         const done = () => {
           if (!panelContainer) return;
           panelContainer.removeEventListener('transitionend', done);
@@ -541,7 +684,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           panelContainer.style.willChange = '';
           try { applyPanelLayout(getPswp(pswpRef)?.el || null); } catch {}
         };
-        panelContainer.addEventListener('transitionend', done);
+        panelContainer.addEventListener('transitionend', done, { once: true });
       } catch {}
     };
 
@@ -636,17 +779,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       } catch {}
     };
 
-    // Enhance existing setPanelCollapsed to animate in sheet mode
-    const originalSetPanelCollapsed = setPanelCollapsed;
-    // Redefine function reference so subsequent uses inside helpers get animation
-      // Wrapper to add animation + a11y side effects without reassigning const
-      const setPanelCollapsedEnhanced = (val: boolean, container?: HTMLElement | null) => {
-        setPanelCollapsed(val, container);
-        applyCollapsedStateAnimated();
-        updateBackgroundInert();
-        announcePanelState();
-        syncSheetFocusTrap();
-      };
+
 
     const onSheetPointerDown = (e: PointerEvent | TouchEvent) => {
       if (!panelContainer) return;
@@ -751,26 +884,56 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     syncSheetFocusTrap();
     try { updateSheetDialogA11y(); } catch {}
 
+    // Enhance existing setPanelCollapsed to animate in sheet mode
+    // Wrapper to add animation + a11y side effects without reassigning const
+    const setPanelCollapsedEnhanced = (val: boolean, container?: HTMLElement | null) => {
+      setPanelCollapsed(val, container);
+      applyCollapsedStateAnimated();
+      updateBackgroundInert();
+      announcePanelState();
+      syncSheetFocusTrap();
+    };
+
     const applyPanelLayout = (container: HTMLElement | null) => {
       if (!container || !panelContainer) return;
       const { overlayMode, activePanelWidth, gutter } = getLayoutState();
+      
+      // Set panel display and width
       panelContainer.style.display = 'flex';
-      panelContainer.style.width = activePanelWidth + 'px';
+      
+      // For desktop mode, ensure smooth width transitions
+      if (!overlayMode) {
+        panelContainer.style.width = activePanelWidth + 'px';
+      }
+      
+      // Configure container base styles
       if (!prevContainerStyles.paddingLeft) prevContainerStyles.paddingLeft = container.style.paddingLeft || null;
       container.style.paddingLeft = '0px';
       container.style.paddingRight = '0px';
       try { container.style.zIndex = '2147483600'; } catch {}
+      
+      // Set CSS custom properties for panel width
       try {
         container.style.setProperty('--pswp-left-panel-width', overlayMode ? '0px' : activePanelWidth + 'px');
         container.style.setProperty('--pswp-left-panel-gutter', gutter + 'px');
       } catch {}
+      
       try {
         const leftOffset = overlayMode ? 0 : (activePanelWidth + gutter);
         styleOverlayContentOffsets(container, leftOffset, overlayMode);
         stylePanelForMode(overlayMode);
       } catch {}
-  try { getPswp(pswpRef)?.updateSize?.(true); } catch {}
-  ensureCollapseHandle(container, activePanelWidth);
+      
+      // Force PhotoSwipe to recalculate layout with a slight delay for desktop transitions
+      if (!overlayMode) {
+        setTimeout(() => {
+          try { getPswp(pswpRef)?.updateSize?.(true); } catch {}
+        }, 50);
+      } else {
+        try { getPswp(pswpRef)?.updateSize?.(true); } catch {}
+      }
+      
+      ensureCollapseHandle(container, activePanelWidth);
       try { manageSheetGestures(); } catch {}
     };
 
@@ -798,22 +961,43 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
     const ensurePanelHeader = () => {
       if (!panelContainer) return null;
-  let headerEl = panelContainer.querySelector<HTMLDivElement>('.pswp-meta-header');
+      let headerEl = panelContainer.querySelector<HTMLDivElement>('.pswp-meta-header');
       if (!headerEl) {
         headerEl = document.createElement('div');
         headerEl.className = 'pswp-meta-header flex items-center gap-2 mb-2 text-[11px] tracking-wide opacity-70';
         headerEl.innerHTML = `
-          <button type="button" data-pswp-collapse aria-expanded="true" title="Collapse panel" style="background:rgba(255,255,255,0.1);border:0;color:#fff;width:28px;height:28px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;line-height:1;">⮜</button>
-          <div class="pswp-slide-count"></div>
+          <button type="button" data-pswp-collapse aria-expanded="true" title="Collapse panel" style="background:rgba(255,255,255,0.1);border:0;color:#fff;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.2);">⮜</button>
+          <div class="pswp-slide-count font-medium"></div>
         `;
         panelContainer.appendChild(headerEl);
-        headerEl.querySelector('[data-pswp-collapse]')?.addEventListener('click', () => {
+        headerEl.querySelector('[data-pswp-collapse]')?.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           const btn = headerEl!.querySelector('[data-pswp-collapse]') as HTMLButtonElement;
-          setPanelCollapsed(!panelCollapsed, lastContainer);
-          const expanded = !panelCollapsed;
-            btn.setAttribute('aria-expanded', String(expanded));
-            btn.title = expanded ? 'Collapse panel' : 'Expand panel';
+          const newCollapsed = !panelCollapsed;
+          const containerElement = lastContainer || getPswp(pswpRef)?.el || null;
+          
+          // Call the enhanced setter that handles all side effects
+          setPanelCollapsedEnhanced(newCollapsed, containerElement);
+          
+          // Update button visual state with animation
+          const expanded = !newCollapsed;
+          btn.setAttribute('aria-expanded', String(expanded));
+          btn.title = expanded ? 'Collapse panel' : 'Expand panel';
+          btn.style.transform = 'scale(0.9)';
+          
+          setTimeout(() => {
             btn.textContent = expanded ? '⮜' : '⮞';
+            btn.style.transform = '';
+          }, 75);
+          
+          // Force a layout update
+          try {
+            if (containerElement) {
+              const pswpInstance = getPswp(pswpRef);
+              pswpInstance?.updateSize?.(true);
+            }
+          } catch {}
         });
       }
       return headerEl;
@@ -883,7 +1067,12 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         }
       });
       controls.querySelector('[data-pswp-help]')?.addEventListener('click', () => toggleHelp());
-      controls.querySelector('[data-pswp-meta]')?.addEventListener('click', () => { try { window.dispatchEvent(new CustomEvent('pswp-toggle-info')); } catch {}; });
+      controls.querySelector('[data-pswp-meta]')?.addEventListener('click', () => { 
+        try { 
+          setPanelCollapsedEnhanced(!panelCollapsed, getPswp(pswpRef)?.el || null);
+          window.dispatchEvent(new CustomEvent('pswp-toggle-info')); 
+        } catch {}; 
+      });
     };
 
     const onThumbClick = (ev: Event) => {
