@@ -241,8 +241,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       if (k === 'c') { jumpNextSameCategory(); }
     };
 
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('pswp-toggle-info', onInfoToggleEvent);
+  document.addEventListener('keydown', onKey);
+  // NOTE: pswp-toggle-info listener is attached after onInfoToggleEvent is defined later in this effect
 
     lightbox.on('close', () => onClose?.());
 
@@ -1345,6 +1345,9 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       }
     };
 
+    // Attach now that the handler is declared (avoids use-before-define warning)
+    window.addEventListener('pswp-toggle-info', onInfoToggleEvent);
+
     const createOverlay = (itemIndex: number, container: HTMLElement | null, reuse = false) => {
       const it = items[itemIndex];
       currentSlideIndex = itemIndex;
@@ -1632,7 +1635,13 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
 
     // Removed unused announceSlide helper (previously throttled live region updates)
 
-  return <section ref={placeholderRef} aria-label="Lightbox gallery" style={{ display: 'block' }} />;
+  // Added suppressHydrationWarning because PhotoSwipe mutates/constructs nearly all
+  // of its DOM only after mount inside useEffect. In development React can flag
+  // benign diffs (e.g. injected helper attrs or timing of injected nodes) as a
+  // hydration mismatch. The static server markup for this component is just an
+  // empty <section>; the client immediately enhances it, so we explicitly
+  // suppress warnings for this root container.
+  return <section ref={placeholderRef} aria-label="Lightbox gallery" style={{ display: 'block' }} suppressHydrationWarning />;
   // NOTE: replaced by semantic section would be better; kept div for minimal change.
 };
 
