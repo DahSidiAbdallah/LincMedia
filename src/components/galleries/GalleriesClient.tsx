@@ -96,6 +96,7 @@ export default function GalleriesClient({ allImages, galleries }: { allImages: C
         open={open}
         index={index}
         onClose={() => setOpen(false)}
+        hidePanelBelow={640}
       />
     </div>
   );
