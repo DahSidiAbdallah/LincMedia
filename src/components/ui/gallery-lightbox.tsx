@@ -5,6 +5,8 @@ import PhotoSwipeLightbox from 'photoswipe/lightbox';
 import 'photoswipe/style.css';
 import ReactDOM from 'react-dom/client';
 
+import FlipCard from './flip-card';
+
 // ---------------------------------------------------------------------------
 // Type scaffolding for gallery-lightbox
 // ---------------------------------------------------------------------------
@@ -230,18 +232,17 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       if (raw === 'Escape') { handleEscape(); return; }
       if (raw === '?' || (raw === '/' && e.shiftKey)) { try { toggleHelp(); } catch {}; return; }
       const k = raw.length === 1 ? raw.toLowerCase() : raw;
-      if (k === 'i' || k === 'f') { 
-        try { 
-          // Toggle both the panel collapse and dispatch toggle-info for flip cards
+      if (k === 'i' || k === 'f') {
+        try {
           setPanelCollapsedEnhanced(!panelCollapsed, getPswp(pswpRef)?.el || null);
-          window.dispatchEvent(new CustomEvent('pswp-toggle-info'));
-        } catch {}; 
-        return; 
+        } catch {};
+        return;
       }
       if (k === 'c') { jumpNextSameCategory(); }
     };
 
     document.addEventListener('keydown', onKey);
+    window.addEventListener('pswp-toggle-info', onInfoToggleEvent);
 
     lightbox.on('close', () => onClose?.());
 
@@ -261,6 +262,11 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   let collapseHandleObserver: MutationObserver | null = null;
   // NEW: collapse + flip-card state (lives within effect scope, resets each open)
   let panelCollapsed = false;
+  let infoToggleButton: HTMLButtonElement | null = null;
+  let flipCardPortal: HTMLDivElement | null = null;
+  let flipCardRoot: ReactDOM.Root | null = null;
+  let flipCardFlipped = false;
+  let currentSlideIndex = index;
   // removed unused: cardFlipped (flip state handled via DOM class only)
   const panelRailWidth = 52; // width when collapsed (rail with icon)
 
@@ -354,26 +360,26 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   };
 
   const setPanelCollapsed = (val: boolean, container?: HTMLElement | null) => {
+    const prev = panelCollapsed;
     panelCollapsed = val;
-  if (panelContainer) {
+    if (panelContainer) {
       panelContainer.setAttribute('data-collapsed', String(panelCollapsed));
     }
-    // when expanding, unflip card automatically
     if (!panelCollapsed) {
-  // reset flipped visual state when expanding
       const fc = document.querySelector('.pswp-flipcard');
-      if (fc) fc.classList.remove('is-flipped');
+      fc?.classList.remove('is-flipped');
     }
-    // re-apply layout to adjust offsets
     try { applyPanelLayout(container || lastContainer); } catch {}
-    // update handle icon state
+    syncFlipCardOverlay();
     if (collapseHandle) {
       collapseHandle.setAttribute('aria-expanded', String(!panelCollapsed));
-      collapseHandle.innerHTML = panelCollapsed ? '&#x25B6;' : '&#x25C0;'; // ► ◀ arrow styles
+      collapseHandle.innerHTML = panelCollapsed ? '&#x25B6;' : '&#x25C0;';
       collapseHandle.title = panelCollapsed ? 'Expand panel' : 'Collapse panel';
     }
-    // keep dialog semantics synced
     try { updateSheetDialogA11y(); } catch {}
+    if (prev !== panelCollapsed) {
+      dispatchInfoEvent();
+    }
   };
 
   // removed unused togglePanelCollapsed / toggleFlipCard (logic retained in setPanelCollapsed)
@@ -384,6 +390,12 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       t.textContent = text;
       document.body.appendChild(t);
       setTimeout(() => t.remove(), 2000);
+    };
+
+  const dispatchInfoEvent = () => {
+      try {
+        window.dispatchEvent(new CustomEvent('pswp-toggle-info', { detail: { collapsed: panelCollapsed, index: currentSlideIndex } }));
+      } catch {}
     };
 
   const dispatchSlideChange = (detail: { item: Item | null; index: number | null; total?: number | null; items?: Item[] }) => {
@@ -476,6 +488,36 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       collapseHandle.style.pointerEvents = 'auto';
     };
 
+    const ensureInfoToggle = (container: HTMLElement | null) => {
+      if (!container && !lastContainer) return;
+      if (!infoToggleButton) {
+        infoToggleButton = document.createElement('button');
+        infoToggleButton.type = 'button';
+        infoToggleButton.className = 'pswp-info-toggle fixed top-4 right-4 z-[2147483630] bg-black/60 text-white px-3 py-2 rounded-md shadow-lg backdrop-blur-sm transition hover:bg-black/80 focus:outline-none focus:ring-2 focus:ring-white/40 focus:ring-offset-2 focus:ring-offset-black/20';
+        infoToggleButton.setAttribute('aria-label', 'Toggle information panel');
+      }
+      infoToggleButton.textContent = panelCollapsed ? 'Show info' : 'Hide info';
+      infoToggleButton.setAttribute('aria-pressed', String(!panelCollapsed));
+      infoToggleButton.setAttribute('aria-expanded', String(!panelCollapsed));
+      infoToggleButton.setAttribute('title', panelCollapsed ? 'Show image information' : 'Hide image information');
+      infoToggleButton.setAttribute('aria-controls', 'pswp-info-panel');
+      infoToggleButton.onclick = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const latestContainer = container || lastContainer;
+        setPanelCollapsedEnhanced(!panelCollapsed, latestContainer);
+      };
+      if (!infoToggleButton.parentElement) {
+        try { document.body.appendChild(infoToggleButton); } catch {}
+      }
+    };
+
+    const removeInfoToggle = () => {
+      if (!infoToggleButton) return;
+      try { infoToggleButton.remove(); } catch {}
+      infoToggleButton = null;
+    };
+
     const styleOverlayContentOffsets = (container: HTMLElement, leftOffset: number, overlayMode: boolean) => {
       const q = (sel: string): HTMLElement | null => container.querySelector<HTMLElement>(sel);
       const scrollWrap = q('.pswp__scroll-wrap');
@@ -484,6 +526,9 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         scrollWrap.style.left = leftOffset + 'px';
         scrollWrap.style.width = overlayMode ? '100%' : `calc(100% - ${leftOffset}px)`;
         scrollWrap.style.marginLeft = '0';
+        scrollWrap.style.display = 'flex';
+        scrollWrap.style.justifyContent = 'center';
+        scrollWrap.style.alignItems = 'center';
         // Add smooth transitions for desktop mode
         if (!overlayMode) {
           scrollWrap.style.transition = 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1)';
@@ -513,6 +558,9 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       }
       const containerEl = q('.pswp__container');
       if (containerEl) {
+        containerEl.style.display = 'flex';
+        containerEl.style.justifyContent = 'center';
+        containerEl.style.alignItems = 'center';
         containerEl.style.marginLeft = '0';
         containerEl.style.maxWidth = '100%';
         containerEl.style.zIndex = '2147483610';
@@ -585,10 +633,10 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
             borderRight: 'none',
             borderTop: '1px solid rgba(255,255,255,0.15)',
             borderRadius: '18px 18px 0 0',
-            padding: panelCollapsed ? '6px 12px 6px 12px' : '14px 18px 16px 18px',
-            background: 'linear-gradient(180deg,rgba(15,15,15,0.88),rgba(5,5,5,0.92))',
-            backdropFilter: 'blur(18px)',
-            boxShadow: '0 -4px 28px -2px rgba(0,0,0,0.55)',
+            padding: panelCollapsed ? '8px 16px 8px 16px' : '18px 24px 20px 24px',
+            background: 'linear-gradient(180deg,rgba(15,15,15,0.92),rgba(5,5,5,0.95))',
+            backdropFilter: 'blur(22px)',
+            boxShadow: '0 -8px 32px -4px rgba(0,0,0,0.55)',
             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
           } as CSSStyleDeclaration
         );
@@ -602,14 +650,14 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           bottom: '0',
           left: '0',
           height: 'auto',
-          borderRadius: '0',
-          borderRight: '1px solid rgba(255,255,255,0.15)',
+          borderRadius: '0 18px 18px 0',
+          borderRight: '1px solid rgba(255,255,255,0.12)',
           borderTop: 'none',
-          background: 'rgba(15,15,15,0.88)',
-          backdropFilter: 'blur(12px)',
-          boxShadow: '2px 0 12px rgba(0,0,0,0.3)',
+          background: 'linear-gradient(180deg,rgba(15,15,15,0.92),rgba(10,10,10,0.88))',
+          backdropFilter: 'blur(18px)',
+          boxShadow: '12px 0 32px -12px rgba(0,0,0,0.45)',
           width: activePanelWidth + 'px',
-          padding: panelCollapsed ? '6px' : '12px 12px 8px 12px',
+          padding: panelCollapsed ? '8px 12px' : '18px 18px 14px 18px',
           transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease',
           overflow: panelCollapsed ? 'hidden' : 'auto'
         });
@@ -932,8 +980,9 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       } else {
         try { getPswp(pswpRef)?.updateSize?.(true); } catch {}
       }
-      
+
       ensureCollapseHandle(container, activePanelWidth);
+      ensureInfoToggle(container);
       try { manageSheetGestures(); } catch {}
     };
 
@@ -952,8 +1001,26 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         panelContainer = document.createElement('div');
         panelContainer.className = 'pswp-meta-panel-container';
         Object.assign(panelContainer.style, {
-          pointerEvents: 'auto', position: 'fixed', top: '0', left: '0', bottom: '0', width: computePanelWidth() + 'px', borderRight: '1px solid rgba(255,255,255,0.15)', boxSizing: 'border-box', padding: '12px 12px 8px 12px', zIndex: '2147483646', background: 'rgba(15,15,15,0.78)', backdropFilter: 'blur(12px)', overflow: 'auto', display: 'flex', flexDirection: 'column'
+          pointerEvents: 'auto',
+          position: 'fixed',
+          top: '0',
+          left: '0',
+          bottom: '0',
+          width: computePanelWidth() + 'px',
+          borderRight: '1px solid rgba(255,255,255,0.12)',
+          boxSizing: 'border-box',
+          padding: '18px 18px 14px 18px',
+          zIndex: '2147483646',
+          background: 'linear-gradient(180deg,rgba(15,15,15,0.92),rgba(10,10,10,0.88))',
+          backdropFilter: 'blur(16px)',
+          overflow: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          borderRadius: '0 18px 18px 0',
+          boxShadow: '0 22px 48px rgba(0,0,0,0.45)'
         } as CSSStyleDeclaration);
+        panelContainer.id = 'pswp-info-panel';
         panelContainer.setAttribute('data-collapsed', 'false');
       }
       return panelContainer;
@@ -964,33 +1031,42 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       let headerEl = panelContainer.querySelector<HTMLDivElement>('.pswp-meta-header');
       if (!headerEl) {
         headerEl = document.createElement('div');
-        headerEl.className = 'pswp-meta-header flex items-center gap-2 mb-2 text-[11px] tracking-wide opacity-70';
-        headerEl.innerHTML = `
-          <button type="button" data-pswp-collapse aria-expanded="true" title="Collapse panel" style="background:rgba(255,255,255,0.1);border:0;color:#fff;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.2);">⮜</button>
-          <div class="pswp-slide-count font-medium"></div>
-        `;
+        headerEl.className = 'pswp-meta-header mb-3 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.18em] text-white/60';
+        headerEl.style.minHeight = '40px';
+        const collapseBtn = document.createElement('button');
+        collapseBtn.type = 'button';
+        collapseBtn.className = 'pswp-header-toggle inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-white shadow-sm transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40';
+        collapseBtn.setAttribute('data-pswp-collapse', '');
+        collapseBtn.setAttribute('aria-expanded', 'true');
+        collapseBtn.setAttribute('aria-label', 'Collapse information panel');
+        collapseBtn.setAttribute('title', 'Collapse information panel');
+        collapseBtn.innerHTML = '<span aria-hidden="true">⮜</span>';
+        const slideCount = document.createElement('div');
+        slideCount.className = 'pswp-slide-count font-semibold tracking-wide text-white/70';
+        headerEl.appendChild(collapseBtn);
+        headerEl.appendChild(slideCount);
         panelContainer.appendChild(headerEl);
-        headerEl.querySelector('[data-pswp-collapse]')?.addEventListener('click', (e) => {
+        collapseBtn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          const btn = headerEl!.querySelector('[data-pswp-collapse]') as HTMLButtonElement;
           const newCollapsed = !panelCollapsed;
           const containerElement = lastContainer || getPswp(pswpRef)?.el || null;
-          
+
           // Call the enhanced setter that handles all side effects
           setPanelCollapsedEnhanced(newCollapsed, containerElement);
-          
+
           // Update button visual state with animation
           const expanded = !newCollapsed;
-          btn.setAttribute('aria-expanded', String(expanded));
-          btn.title = expanded ? 'Collapse panel' : 'Expand panel';
-          btn.style.transform = 'scale(0.9)';
-          
+          collapseBtn.setAttribute('aria-expanded', String(expanded));
+          collapseBtn.setAttribute('aria-label', expanded ? 'Collapse information panel' : 'Expand information panel');
+          collapseBtn.setAttribute('title', expanded ? 'Collapse information panel' : 'Expand information panel');
+          collapseBtn.style.transform = 'scale(0.94)';
+
           setTimeout(() => {
-            btn.textContent = expanded ? '⮜' : '⮞';
-            btn.style.transform = '';
+            collapseBtn.innerHTML = `<span aria-hidden="true">${expanded ? '⮜' : '⮞'}</span>`;
+            collapseBtn.style.transform = '';
           }, 75);
-          
+
           // Force a layout update
           try {
             if (containerElement) {
@@ -1008,7 +1084,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
   let panelBody = panelContainer.querySelector<HTMLDivElement>('.pswp-panel-body');
       if (!panelBody) {
         panelBody = document.createElement('div');
-        panelBody.className = 'pswp-panel-body flex flex-col';
+        panelBody.className = 'pswp-panel-body flex flex-col gap-4 text-white/90';
         const footerExisting = panelContainer.querySelector('.pswp-panel-footer');
         if (footerExisting) panelContainer.insertBefore(panelBody, footerExisting); else panelContainer.appendChild(panelBody);
       }
@@ -1016,21 +1092,32 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       const more = (it.caption || '').length > 200;
       let exifHtml = '';
       if (it.exif) {
-        const parts = Object.entries(it.exif).map(([k, v]) => `<div><strong>${k}:</strong> ${v}</div>`);
-        exifHtml = `<div class="text-sm text-muted-foreground mt-2">${parts.join('')}</div>`;
+        const parts = Object.entries(it.exif)
+          .filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '')
+          .map(([k, v]) => `<li class="flex items-center justify-between gap-3 text-xs uppercase tracking-wide"><span class="text-white/60">${k}</span><span class="font-semibold text-white/90">${v}</span></li>`);
+        if (parts.length) {
+          exifHtml = `<ul class="mt-4 space-y-2 rounded-lg border border-white/10 bg-black/40 p-3">${parts.join('')}</ul>`;
+        }
       }
       const thumbs = items.map((itm, idx) => {
-        const active = idx === itemIndex ? 'outline:2px solid #fff;' : '';
-  // prefer descriptive alt text when available
-  const thumbAlt = itm.title ? itm.title.replace(/"/g, '') : `thumb ${idx+1}`;
-  return `<button data-pswp-go="${idx}" style="background:#111;border:0;padding:0;margin:0;cursor:pointer;${active}display:inline-block;width:62px;height:48px;overflow:hidden;border-radius:4px;"><img src="${itm.src || itm.video?.src || ''}" alt="${thumbAlt}" style="width:100%;height:100%;object-fit:cover;display:block;" /></button>`;
+        const active = idx === itemIndex;
+        const thumbSrc = itm.src || itm.video?.poster || itm.video?.src || '';
+        const thumbAlt = (itm.title || itm.caption || `Slide ${idx + 1}`).replace(/"/g, '');
+        const buttonClasses = active
+          ? 'border-white/80 shadow-lg opacity-100'
+          : 'border-white/10 opacity-70 hover:opacity-100 focus-visible:opacity-100';
+        const imgClasses = active ? 'opacity-100' : 'opacity-80';
+        return `<button type="button" data-pswp-go="${idx}" aria-label="Go to slide ${idx + 1}" aria-pressed="${active}" class="pswp-thumb inline-flex h-14 w-[72px] items-center justify-center overflow-hidden rounded-md border ${buttonClasses} bg-black/40 transition focus:outline-none focus:ring-2 focus:ring-white/40"><img src="${thumbSrc}" alt="${thumbAlt}" loading="lazy" class="h-full w-full object-cover ${imgClasses}" /></button>`;
       }).join('');
       panelBody.innerHTML = `
-        <div class="pswp-thumb-bar flex flex-wrap gap-2 mb-4">${thumbs}</div>
-        <div class="font-semibold line-clamp-2">${it.title || ''}</div>
-        <div class="text-sm mt-2 leading-snug">${short}${more ? '...' : ''}</div>
-        ${more ? '<button data-pswp-readmore class="mt-2 underline text-sm">Read more</button>' : ''}
-        ${exifHtml}
+        <div class="pswp-thumb-bar grid grid-cols-3 gap-2 mb-3 sm:mb-4">${thumbs}</div>
+        <div class="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
+          <div class="text-xs uppercase tracking-[0.2em] text-white/50 mb-2">Now viewing</div>
+          <div class="text-lg font-semibold leading-snug text-white">${it.title || 'Untitled image'}</div>
+          ${it.caption ? `<p class="mt-2 text-sm leading-relaxed text-white/75">${short}${more ? '…' : ''}</p>` : '<p class="mt-2 text-sm text-white/60">No description provided.</p>'}
+          ${more ? '<button data-pswp-readmore class="mt-3 rounded-md bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/40">Read more</button>' : ''}
+          ${exifHtml}
+        </div>
       `;
       const slideCountEl = panelContainer.querySelector('.pswp-slide-count');
       if (slideCountEl) slideCountEl.textContent = `SLIDE ${itemIndex + 1} / ${items.length}`;
@@ -1041,7 +1128,21 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       if (!panelContainer.querySelector('.pswp-panel-footer')) {
         const footer = document.createElement('div');
         footer.className = 'pswp-panel-footer';
-        Object.assign(footer.style, { position: 'sticky', bottom: '0', left: '0', right: '0', marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.15)', background: 'rgba(10,10,10,0.55)', backdropFilter: 'blur(6px)', padding: '8px 8px', display: 'flex', justifyContent: 'center' } as CSSStyleDeclaration);
+        Object.assign(footer.style, {
+          position: 'sticky',
+          bottom: '0',
+          left: '0',
+          right: '0',
+          marginTop: 'auto',
+          borderTop: '1px solid rgba(255,255,255,0.12)',
+          background: 'linear-gradient(180deg,rgba(10,10,10,0.88),rgba(5,5,5,0.94))',
+          backdropFilter: 'blur(14px)',
+          padding: '10px 12px',
+          display: 'flex',
+          justifyContent: 'center',
+          borderRadius: '14px',
+          boxShadow: '0 -6px 24px rgba(0,0,0,0.35)'
+        } as CSSStyleDeclaration);
         footer.appendChild(controls);
         panelContainer.appendChild(footer);
       }
@@ -1067,11 +1168,10 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         }
       });
       controls.querySelector('[data-pswp-help]')?.addEventListener('click', () => toggleHelp());
-      controls.querySelector('[data-pswp-meta]')?.addEventListener('click', () => { 
-        try { 
+      controls.querySelector('[data-pswp-meta]')?.addEventListener('click', () => {
+        try {
           setPanelCollapsedEnhanced(!panelCollapsed, getPswp(pswpRef)?.el || null);
-          window.dispatchEvent(new CustomEvent('pswp-toggle-info')); 
-        } catch {}; 
+        } catch {};
       });
     };
 
@@ -1085,8 +1185,169 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       try { panelContainer?.querySelectorAll('[data-pswp-go]').forEach(btn => btn.addEventListener('click', onThumbClick)); } catch {}
     };
 
+    const ensureFlipCardContainer = () => {
+      const root = ensureOverlayRoot();
+      if (!root) return null;
+      if (!flipCardPortal) {
+        flipCardPortal = document.createElement('div');
+        flipCardPortal.className = 'pswp-flipcard-portal pointer-events-none flex h-full w-full items-end justify-center p-4 sm:p-6';
+        Object.assign(flipCardPortal.style, {
+          position: 'absolute',
+          inset: '0',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          pointerEvents: 'none'
+        } as CSSStyleDeclaration);
+        root.appendChild(flipCardPortal);
+      }
+      if (!flipCardRoot && flipCardPortal) {
+        flipCardRoot = ReactDOM.createRoot(flipCardPortal);
+      }
+      return flipCardPortal;
+    };
+
+    const destroyFlipCardOverlay = () => {
+      try { flipCardRoot?.unmount(); } catch {}
+      flipCardRoot = null;
+      if (flipCardPortal) {
+        try { flipCardPortal.remove(); } catch {}
+        flipCardPortal = null;
+      }
+      flipCardFlipped = false;
+    };
+
+    const updateFlipCardContent = (itemIndex: number) => {
+      if (!panelCollapsed) {
+        destroyFlipCardOverlay();
+        return;
+      }
+      const item = items[itemIndex];
+      if (!item) return;
+      ensureFlipCardContainer();
+      if (!flipCardRoot) return;
+      const mediaSrc = item.video?.poster || item.video?.src || item.src || '';
+      const altText = item.title || item.caption || 'Gallery media';
+      const captionText = item.caption || '';
+      const exifEntries = item.exif
+        ? Object.entries(item.exif).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+        : [];
+      const handleToggle = () => { setFlipCardState(!flipCardFlipped, itemIndex); };
+
+      flipCardRoot.render(
+        <div className="pointer-events-none flex w-full justify-center">
+          <div className="pointer-events-auto w-full max-w-sm sm:max-w-md lg:max-w-lg">
+            <FlipCard
+              disableOverlay
+              isFlipped={flipCardFlipped}
+              onToggle={handleToggle}
+              className={`pswp-flipcard w-full rounded-2xl bg-black/40 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur ${flipCardFlipped ? 'is-flipped' : ''}`}
+              frontClassName="rounded-2xl bg-black/60 p-3 text-white sm:p-4 space-y-3"
+              backClassName="rounded-2xl bg-black/80 p-3 text-white sm:p-4 space-y-4 overflow-y-auto max-h-[70vh]"
+            >
+              <div className="space-y-3">
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                  {mediaSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={mediaSrc}
+                      alt={altText}
+                      loading="lazy"
+                      className="h-52 w-full object-contain bg-black/30"
+                    />
+                  ) : (
+                    <div className="flex h-52 w-full items-center justify-center bg-gradient-to-br from-white/10 to-white/5 text-xs font-semibold uppercase tracking-[0.2em] text-white/60">
+                      No preview available
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-white/90">{item.title || 'Untitled image'}</div>
+                  {captionText ? (
+                    <p className="mt-1 line-clamp-3 text-xs text-white/70">{captionText}</p>
+                  ) : null}
+                </div>
+                <div className="text-[11px] uppercase tracking-wide text-white/60">Click or press Enter to flip for details</div>
+              </div>
+              <div className="flex h-full flex-col space-y-3">
+                <div>
+                  <div className="text-base font-semibold text-white">{item.title || 'Image details'}</div>
+                  {captionText ? (
+                    <p className="mt-2 text-sm leading-relaxed text-white/80">{captionText}</p>
+                  ) : (
+                    <p className="mt-2 text-sm text-white/60">No description provided.</p>
+                  )}
+                </div>
+                {exifEntries.length > 0 ? (
+                  <div className="space-y-2 rounded-xl border border-white/10 bg-white/5 p-3">
+                    {exifEntries.map(([label, value]) => (
+                      <div
+                        key={label}
+                        className="flex items-center justify-between gap-4 text-xs uppercase tracking-wide text-white/70"
+                      >
+                        <span>{label}</span>
+                        <span className="font-semibold text-white/90">{String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-white/60">No technical metadata available.</p>
+                )}
+                <button
+                  type="button"
+                  className="self-start rounded-md bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white shadow-sm transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
+                  onClick={(ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    setFlipCardState(false, itemIndex);
+                  }}
+                >
+                  Show image
+                </button>
+              </div>
+            </FlipCard>
+          </div>
+        </div>
+      );
+    };
+
+    const setFlipCardState = (flipped: boolean, itemIndexOverride?: number) => {
+      const idx = typeof itemIndexOverride === 'number' ? itemIndexOverride : currentSlideIndex;
+      const next = Boolean(flipped);
+      if (flipCardFlipped === next) {
+        if (panelCollapsed) updateFlipCardContent(idx);
+        return;
+      }
+      flipCardFlipped = next;
+      if (panelCollapsed) {
+        updateFlipCardContent(idx);
+      } else {
+        destroyFlipCardOverlay();
+      }
+    };
+
+    const syncFlipCardOverlay = (itemIndex?: number) => {
+      const idx = typeof itemIndex === 'number' ? itemIndex : currentSlideIndex;
+      if (!panelCollapsed) {
+        destroyFlipCardOverlay();
+        return;
+      }
+      ensureFlipCardContainer();
+      updateFlipCardContent(idx);
+    };
+
+    const onInfoToggleEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ collapsed?: boolean; index?: number }>).detail;
+      if (detail && typeof detail.collapsed === 'boolean') {
+        setFlipCardState(detail.collapsed, typeof detail.index === 'number' ? detail.index : undefined);
+      } else {
+        setFlipCardState(!flipCardFlipped);
+      }
+    };
+
     const createOverlay = (itemIndex: number, container: HTMLElement | null, reuse = false) => {
       const it = items[itemIndex];
+      currentSlideIndex = itemIndex;
   try { window.__photoSwipeCurrentItem = it; window.__photoSwipeCurrentIndex = itemIndex; } catch {}
   try { window.__photoSwipeTotal = items.length; } catch {}
   try { window.__photoSwipeItems = items; } catch {}
@@ -1100,11 +1361,11 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         controls.className = 'pointer-events-auto bg-black/40 backdrop-blur-sm text-white rounded-md px-2 py-2 flex items-center gap-2';
         Object.assign(controls.style, { pointerEvents: 'auto', position: 'relative', margin: '0' });
         controls.innerHTML = `
-          <button data-pswp-meta class="pswp-btn" title="(I/F) Toggle Info">Info</button>
-          <button data-pswp-download class="pswp-btn">Download</button>
-          <button data-pswp-print class="pswp-btn">Print</button>
-          <button data-pswp-share class="pswp-btn">Share</button>
-          <button data-pswp-help class="pswp-btn" title="(?) Keyboard Help">?</button>
+          <button type="button" data-pswp-meta class="pswp-btn" title="(I/F) Toggle info panel" aria-label="Toggle info panel">Info</button>
+          <button type="button" data-pswp-download class="pswp-btn" aria-label="Download image">Download</button>
+          <button type="button" data-pswp-print class="pswp-btn" aria-label="Print image">Print</button>
+          <button type="button" data-pswp-share class="pswp-btn" aria-label="Share image">Share</button>
+          <button type="button" data-pswp-help class="pswp-btn" title="(?) Keyboard help" aria-label="Show keyboard shortcuts">?</button>
         `;
         ensureFooterControls(controls);
         root.appendChild(panelContainer!);
@@ -1113,6 +1374,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       ensurePanelBody(it, itemIndex);
       wireThumbnails();
   try { updateSheetDialogA11y(itemIndex); } catch {}
+      syncFlipCardOverlay(itemIndex);
 
       // shift the PhotoSwipe content area to the right so the left panel does not overlap images (only first time)
       try {
@@ -1177,6 +1439,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
           try { getPswp(pswpRef)?.updateSize?.(true); } catch {}
           try { manageSheetGestures(); } catch {}
           updateBackgroundInert();
+          syncFlipCardOverlay();
           clampExpandedHeight();
           if (!panelCollapsed) {
             // ensure height stays within new bounds after rotation / resize
@@ -1274,6 +1537,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
       dispatchSlideChange({ item: null, index: null });
       restoreContainerStyles();
   if (overlayEl) { overlayEl.remove(); overlayEl = null; }
+      removeInfoToggle();
+      destroyFlipCardOverlay();
   // progress bar removed
       // defer unmount to avoid synchronous root unmount during render
   setTimeout(() => unmountPanel(), 0);
@@ -1289,7 +1554,8 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     const removeGlobalListeners = () => {
       document.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', onResize);
-  const flipListener = (lightbox as unknown as Record<string, unknown>)._pswpFlipListener as EventListener | undefined;
+      window.removeEventListener('pswp-toggle-info', onInfoToggleEvent);
+      const flipListener = (lightbox as unknown as Record<string, unknown>)._pswpFlipListener as EventListener | undefined;
       if (flipListener) document.removeEventListener('click', flipListener);
     };
     const teardownGestures = () => { try { detachSheetGestures(); } catch {} };
@@ -1320,7 +1586,12 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
     const cleanupEffect = () => {
       removeGlobalListeners();
       try { restoreContainerStyles(); } catch {}
-      if (overlayEl) overlayEl.remove();
+      if (overlayEl) {
+        overlayEl.remove();
+        overlayEl = null;
+      }
+      removeInfoToggle();
+      destroyFlipCardOverlay();
       teardownGestures();
       destroyInstance();
       disconnectObservers();

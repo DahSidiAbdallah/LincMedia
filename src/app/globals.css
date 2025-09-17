@@ -96,6 +96,39 @@ html {
   right: calc(var(--pswp-right-strip-width, 0px) + 12px) !important;
 }
 
+.pswp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: rgba(15, 15, 15, 0.68);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.6);
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.pswp-btn:hover,
+.pswp-btn:focus {
+  background: rgba(15, 15, 15, 0.9);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.pswp-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
+.pswp-btn:active {
+  transform: translateY(1px);
+}
+
 /* Filter transition animations */
 @keyframes filter-fade-scale-in {
   0% { opacity: 0; transform: scale(.95); }
