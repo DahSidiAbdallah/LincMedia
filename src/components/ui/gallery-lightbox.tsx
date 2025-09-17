@@ -1460,7 +1460,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
         try { updateUnderlyingMediaVisibility(); } catch {}
     };
 
-      // Hide underlying main media when collapsed (flipcard active) to avoid double view
+      // Hide underlying main media whenever the panel is collapsed so the flipcard is primary
       const updateUnderlyingMediaVisibility = () => {
         try {
           const pswpEl = getPswp(pswpRef)?.el;
@@ -1471,7 +1471,7 @@ const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ items, index = 0, ope
             currentItem.querySelectorAll<HTMLElement>('img, video, .pswp__img, .pswp__zoom-wrap, .pswp__content')
           );
           if (!mediaTargets.length) return;
-          const hide = Boolean(panelCollapsed && flipCardFlipped);
+          const hide = Boolean(panelCollapsed);
           pswpEl.classList.toggle('pswp--flipcard-active', hide);
           mediaTargets.forEach((media) => {
             if (hide) {
