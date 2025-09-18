@@ -1,14 +1,15 @@
 "use client";
 import React, { useState, useMemo } from 'react';
 import { GalleryImage, GalleryDef } from '@/data/galleries';
-import GalleryLightbox from '@/components/ui/gallery-lightbox';
+import dynamic from 'next/dynamic';
+const GalleryLightbox = dynamic(() => import('@/components/ui/gallery-lightbox'), { ssr: false });
 import AnimatedWrapper from '@/components/ui/animated-wrapper';
 import Image from 'next/image';
 import Link from 'next/link';
 
 type CombinedImage = GalleryImage & { gallery: string; category: string };
 
-export default function GalleriesClient({ allImages, galleries }: { allImages: CombinedImage[]; galleries: GalleryDef[] }) {
+export default function GalleriesClient({ allImages, galleries }: Readonly<{ allImages: CombinedImage[]; galleries: GalleryDef[] }>) {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);

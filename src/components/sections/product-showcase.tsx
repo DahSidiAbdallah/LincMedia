@@ -4,8 +4,12 @@ import Image from 'next/image';
 import AnimatedWrapper from '@/components/ui/animated-wrapper';
 import Breadcrumb from '@/components/ui/breadcrumb';
 import { Button } from '../ui/button';
-import FlipCard from '@/components/ui/flip-card';
-import GalleryLightbox, { GalleryLightboxItem, ExifData } from '@/components/ui/gallery-lightbox';
+const FlipCard = dynamic(() => import('@/components/ui/flip-card'), { ssr: false });
+import dynamic from 'next/dynamic';
+// Dynamically load the heavy lightbox component on the client only
+const GalleryLightbox = dynamic(() => import('@/components/ui/gallery-lightbox'), { ssr: false });
+// types used by this module (import types only during build-time)
+import type { GalleryLightboxItem, ExifData } from '@/components/ui/gallery-lightbox';
 import { galleries } from '@/data/galleries';
 
 
