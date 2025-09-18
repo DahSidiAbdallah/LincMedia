@@ -1,16 +1,27 @@
 "use client";
+import React from 'react';
 import AnimatedWrapper from '@/components/ui/animated-wrapper';
 
 const HeroSection = () => {
+  const [videoSrc, setVideoSrc] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    // set video src on client only to avoid fetching the large background
+    // video during SSR and improve Largest Contentful Paint (LCP).
+    setVideoSrc('/20250904_1048_Scenic%20Journey%20Visuals_simple_compose_01k4a5e9fpenqr6wt3t93x998e.mp4');
+  }, []);
+
   return (
     <section className="relative h-screen flex flex-col justify-end overflow-hidden bg-background pb-16">
       <div className="absolute inset-0">
         <video
-          src="/20250904_1048_Scenic%20Journey%20Visuals_simple_compose_01k4a5e9fpenqr6wt3t93x998e.mp4"
-          autoPlay
+          src={videoSrc || undefined}
+          autoPlay={Boolean(videoSrc)}
           loop
           muted
           playsInline
+          preload="metadata"
+          poster="/social-preview-1200x630.png"
           className="w-full h-full object-cover"
           style={{ position: 'absolute', inset: 0 }}
         />
